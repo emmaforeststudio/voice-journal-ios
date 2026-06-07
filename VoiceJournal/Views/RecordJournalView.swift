@@ -49,7 +49,7 @@ struct RecordJournalView: View {
                 }
 
                 if viewModel.isProcessing {
-                    ProgressView("Transcribing privately on this device")
+                    ProgressView("Transcribing and shaping your journal")
                 }
 
                 if let error = viewModel.errorMessage {

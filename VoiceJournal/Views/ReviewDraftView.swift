@@ -65,9 +65,8 @@ struct ReviewDraftView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let generatedTitle = processor.makeTitle(from: journalBody, language: language)
                         let entry = JournalEntry(
-                            title: generatedTitle,
+                            title: title,
                             body: journalBody.trimmingCharacters(in: .whitespacesAndNewlines),
                             journalDate: journalDate,
                             emoji: emoji,

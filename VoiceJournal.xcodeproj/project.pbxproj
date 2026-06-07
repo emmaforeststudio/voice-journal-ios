@@ -13,6 +13,7 @@
 		100000000000000000000104 /* JournalProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000204 /* JournalProcessor.swift */; };
 		100000000000000000000105 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000205 /* AudioRecorder.swift */; };
 		100000000000000000000106 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000206 /* SpeechTranscriber.swift */; };
+		100000000000000000000116 /* OpenAIJournalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* OpenAIJournalService.swift */; };
 		100000000000000000000107 /* RecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000207 /* RecorderViewModel.swift */; };
 		100000000000000000000108 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000208 /* MainTabView.swift */; };
 		100000000000000000000109 /* RecordJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000209 /* RecordJournalView.swift */; };
@@ -41,6 +42,7 @@
 		100000000000000000000204 /* JournalProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalProcessor.swift; sourceTree = "<group>"; };
 		100000000000000000000205 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		100000000000000000000206 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
+		100000000000000000000217 /* OpenAIJournalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIJournalService.swift; sourceTree = "<group>"; };
 		100000000000000000000207 /* RecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderViewModel.swift; sourceTree = "<group>"; };
 		100000000000000000000208 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		100000000000000000000209 /* RecordJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordJournalView.swift; sourceTree = "<group>"; };
@@ -110,6 +112,7 @@
 				100000000000000000000204 /* JournalProcessor.swift */,
 				100000000000000000000205 /* AudioRecorder.swift */,
 				100000000000000000000206 /* SpeechTranscriber.swift */,
+				100000000000000000000217 /* OpenAIJournalService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -266,6 +269,7 @@
 				100000000000000000000104 /* JournalProcessor.swift in Sources */,
 				100000000000000000000105 /* AudioRecorder.swift in Sources */,
 				100000000000000000000106 /* SpeechTranscriber.swift in Sources */,
+				100000000000000000000116 /* OpenAIJournalService.swift in Sources */,
 				100000000000000000000107 /* RecorderViewModel.swift in Sources */,
 				100000000000000000000108 /* MainTabView.swift in Sources */,
 				100000000000000000000109 /* RecordJournalView.swift in Sources */,

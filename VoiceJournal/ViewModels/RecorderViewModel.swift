@@ -10,6 +10,7 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var recordingDuration: TimeInterval = 0
 
     let recorder = AudioRecorder()
+    private let openAIJournalService = OpenAIJournalService()
     private let transcriber = SpeechTranscriber()
     private let processor = JournalProcessor()
     private var recordingTimer: AnyCancellable?
@@ -48,8 +49,14 @@ final class RecorderViewModel: ObservableObject {
             do {
                 let url = try recorder.stop()
                 defer { recorder.deleteRecording(at: url) }
-                let transcript = try await transcriber.transcribeAudio(at: url, language: selectedLanguage)
-                draft = processor.makeDraft(from: transcript, language: selectedLanguage)
+                do {
+                    draft = try await openAIJournalService.makeDraft(from: url, language: selectedLanguage)
+                } catch {
+                    let transcript = try await transcriber.transcribeAudio(at: url, language: selectedLanguage)
+                    var fallbackDraft = processor.makeDraft(from: transcript, language: selectedLanguage)
+                    fallbackDraft.notice = "OpenAI enhancement was unavailable, so this journal was transcribed and processed on your iPhone. \(error.localizedDescription)"
+                    draft = fallbackDraft
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 draft = JournalDraft(
