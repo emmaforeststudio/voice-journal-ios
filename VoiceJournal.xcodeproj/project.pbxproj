@@ -1,0 +1,540 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000101 /* VoiceJournalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000201 /* VoiceJournalApp.swift */; };
+		100000000000000000000102 /* JournalEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000202 /* JournalEntry.swift */; };
+		100000000000000000000103 /* JournalDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000203 /* JournalDraft.swift */; };
+		100000000000000000000104 /* JournalProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000204 /* JournalProcessor.swift */; };
+		100000000000000000000105 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000205 /* AudioRecorder.swift */; };
+		100000000000000000000106 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000206 /* SpeechTranscriber.swift */; };
+		100000000000000000000107 /* RecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000207 /* RecorderViewModel.swift */; };
+		100000000000000000000108 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000208 /* MainTabView.swift */; };
+		100000000000000000000109 /* RecordJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000209 /* RecordJournalView.swift */; };
+		100000000000000000000110 /* ReviewDraftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000210 /* ReviewDraftView.swift */; };
+		100000000000000000000111 /* CalendarJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000211 /* CalendarJournalView.swift */; };
+		100000000000000000000112 /* SearchJournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000212 /* SearchJournalView.swift */; };
+		100000000000000000000113 /* EntryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000213 /* EntryDetailView.swift */; };
+		100000000000000000000114 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000214 /* Assets.xcassets */; };
+		100000000000000000000115 /* JournalProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* JournalProcessorTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		100000000000000000000301 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000401;
+			remoteInfo = VoiceJournal;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000201 /* VoiceJournalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceJournalApp.swift; sourceTree = "<group>"; };
+		100000000000000000000202 /* JournalEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntry.swift; sourceTree = "<group>"; };
+		100000000000000000000203 /* JournalDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalDraft.swift; sourceTree = "<group>"; };
+		100000000000000000000204 /* JournalProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalProcessor.swift; sourceTree = "<group>"; };
+		100000000000000000000205 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		100000000000000000000206 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
+		100000000000000000000207 /* RecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000208 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		100000000000000000000209 /* RecordJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordJournalView.swift; sourceTree = "<group>"; };
+		100000000000000000000210 /* ReviewDraftView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDraftView.swift; sourceTree = "<group>"; };
+		100000000000000000000211 /* CalendarJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarJournalView.swift; sourceTree = "<group>"; };
+		100000000000000000000212 /* SearchJournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchJournalView.swift; sourceTree = "<group>"; };
+		100000000000000000000213 /* EntryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryDetailView.swift; sourceTree = "<group>"; };
+		100000000000000000000214 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		100000000000000000000215 /* JournalProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalProcessorTests.swift; sourceTree = "<group>"; };
+		100000000000000000000216 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000501 /* VoiceJournal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceJournal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000502 /* VoiceJournalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoiceJournalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		100000000000000000000601 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000602 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000701 = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000702 /* VoiceJournal */,
+				100000000000000000000710 /* VoiceJournalTests */,
+				100000000000000000000720 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000702 /* VoiceJournal */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000201 /* VoiceJournalApp.swift */,
+				100000000000000000000703 /* Models */,
+				100000000000000000000704 /* Services */,
+				100000000000000000000705 /* ViewModels */,
+				100000000000000000000706 /* Views */,
+				100000000000000000000707 /* Resources */,
+			);
+			path = VoiceJournal;
+			sourceTree = "<group>";
+		};
+		100000000000000000000703 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000202 /* JournalEntry.swift */,
+				100000000000000000000203 /* JournalDraft.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		100000000000000000000704 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000204 /* JournalProcessor.swift */,
+				100000000000000000000205 /* AudioRecorder.swift */,
+				100000000000000000000206 /* SpeechTranscriber.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		100000000000000000000705 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000207 /* RecorderViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		100000000000000000000706 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000208 /* MainTabView.swift */,
+				100000000000000000000209 /* RecordJournalView.swift */,
+				100000000000000000000210 /* ReviewDraftView.swift */,
+				100000000000000000000211 /* CalendarJournalView.swift */,
+				100000000000000000000212 /* SearchJournalView.swift */,
+				100000000000000000000213 /* EntryDetailView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		100000000000000000000707 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000214 /* Assets.xcassets */,
+				100000000000000000000216 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		100000000000000000000710 /* VoiceJournalTests */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000215 /* JournalProcessorTests.swift */,
+			);
+			path = VoiceJournalTests;
+			sourceTree = "<group>";
+		};
+		100000000000000000000720 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000501 /* VoiceJournal.app */,
+				100000000000000000000502 /* VoiceJournalTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000401 /* VoiceJournal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000801 /* Build configuration list for PBXNativeTarget "VoiceJournal" */;
+			buildPhases = (
+				100000000000000000000901 /* Sources */,
+				100000000000000000000601 /* Frameworks */,
+				100000000000000000000902 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VoiceJournal;
+			productName = VoiceJournal;
+			productReference = 100000000000000000000501 /* VoiceJournal.app */;
+			productType = "com.apple.product-type.application";
+		};
+		100000000000000000000402 /* VoiceJournalTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000802 /* Build configuration list for PBXNativeTarget "VoiceJournalTests" */;
+			buildPhases = (
+				100000000000000000000903 /* Sources */,
+				100000000000000000000602 /* Frameworks */,
+				100000000000000000000904 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000302 /* PBXTargetDependency */,
+			);
+			name = VoiceJournalTests;
+			productName = VoiceJournalTests;
+			productReference = 100000000000000000000502 /* VoiceJournalTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					100000000000000000000401 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					100000000000000000000402 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 100000000000000000000401;
+					};
+				};
+			};
+			buildConfigurationList = 100000000000000000000800 /* Build configuration list for PBXProject "VoiceJournal" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000701;
+			productRefGroup = 100000000000000000000720 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000401 /* VoiceJournal */,
+				100000000000000000000402 /* VoiceJournalTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000902 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000114 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000904 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		100000000000000000000901 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000101 /* VoiceJournalApp.swift in Sources */,
+				100000000000000000000102 /* JournalEntry.swift in Sources */,
+				100000000000000000000103 /* JournalDraft.swift in Sources */,
+				100000000000000000000104 /* JournalProcessor.swift in Sources */,
+				100000000000000000000105 /* AudioRecorder.swift in Sources */,
+				100000000000000000000106 /* SpeechTranscriber.swift in Sources */,
+				100000000000000000000107 /* RecorderViewModel.swift in Sources */,
+				100000000000000000000108 /* MainTabView.swift in Sources */,
+				100000000000000000000109 /* RecordJournalView.swift in Sources */,
+				100000000000000000000110 /* ReviewDraftView.swift in Sources */,
+				100000000000000000000111 /* CalendarJournalView.swift in Sources */,
+				100000000000000000000112 /* SearchJournalView.swift in Sources */,
+				100000000000000000000113 /* EntryDetailView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000903 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000115 /* JournalProcessorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		100000000000000000000302 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000401 /* VoiceJournal */;
+			targetProxy = 100000000000000000000301 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		100000000000000000000811 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		100000000000000000000812 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		100000000000000000000821 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoiceJournal/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Voice Journal";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.emmafengxi.VoiceJournal;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		100000000000000000000822 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoiceJournal/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Voice Journal";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.emmafengxi.VoiceJournal;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		100000000000000000000831 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.emmafengxi.VoiceJournalTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VoiceJournal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VoiceJournal";
+			};
+			name = Debug;
+		};
+		100000000000000000000832 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.emmafengxi.VoiceJournalTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VoiceJournal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VoiceJournal";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		100000000000000000000800 /* Build configuration list for PBXProject "VoiceJournal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000811 /* Debug */,
+				100000000000000000000812 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000801 /* Build configuration list for PBXNativeTarget "VoiceJournal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000821 /* Debug */,
+				100000000000000000000822 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000802 /* Build configuration list for PBXNativeTarget "VoiceJournalTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000831 /* Debug */,
+				100000000000000000000832 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 100000000000000000000001 /* Project object */;
+}
