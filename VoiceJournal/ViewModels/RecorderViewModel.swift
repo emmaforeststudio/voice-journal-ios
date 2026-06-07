@@ -58,7 +58,7 @@ final class RecorderViewModel: ObservableObject {
                     journalDate: .now,
                     emoji: "🙂",
                     language: selectedLanguage,
-                    notice: "The recording finished, but speech transcription was unavailable. You can type your journal below and save it."
+                    notice: "The recording finished, but speech transcription was unavailable: \(error.localizedDescription) You can type your journal below and save it."
                 )
             }
             isProcessing = false

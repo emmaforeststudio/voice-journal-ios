@@ -9,6 +9,7 @@ struct ReviewDraftView: View {
     private let language: JournalLanguage
     private let notice: String?
     private let onSave: (JournalEntry) -> Void
+    private let processor = JournalProcessor()
 
     init(draft: JournalDraft, onSave: @escaping (JournalEntry) -> Void) {
         _title = State(initialValue: draft.title)
@@ -30,8 +31,12 @@ struct ReviewDraftView: View {
                     }
                 }
 
+                Section("Generated Title") {
+                    Text(title)
+                        .foregroundStyle(title == "Untitled Journal" ? .secondary : .primary)
+                }
+
                 Section {
-                    TextField("Title", text: $title)
                     DatePicker("Date", selection: $journalDate, displayedComponents: .date)
                     EmojiSelector(selection: $emoji)
                 }
@@ -42,6 +47,9 @@ struct ReviewDraftView: View {
                 }
             }
             .navigationTitle("Review Text Journal")
+            .onChange(of: journalBody) { _, newValue in
+                title = processor.makeTitle(from: newValue, language: language)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Discard") {
@@ -51,8 +59,9 @@ struct ReviewDraftView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
+                        let generatedTitle = processor.makeTitle(from: journalBody, language: language)
                         let entry = JournalEntry(
-                            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Journal" : title,
+                            title: generatedTitle,
                             body: journalBody.trimmingCharacters(in: .whitespacesAndNewlines),
                             journalDate: journalDate,
                             emoji: emoji,

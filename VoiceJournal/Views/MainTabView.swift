@@ -5,17 +5,17 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            CalendarJournalView()
-                .tabItem {
-                    Label("Calendar", systemImage: "calendar")
-                }
-                .tag(0)
-
             RecordJournalView {
-                selectedTab = 0
+                selectedTab = 1
             }
                 .tabItem {
                     Label("Record", systemImage: "mic.circle.fill")
+                }
+                .tag(0)
+
+            CalendarJournalView()
+                .tabItem {
+                    Label("Calendar", systemImage: "calendar")
                 }
                 .tag(1)
 
