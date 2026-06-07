@@ -6,6 +6,7 @@ struct ReviewDraftView: View {
     @State private var journalBody: String
     @State private var journalDate: Date
     @State private var emoji: String
+    @State private var didManuallyChooseEmoji = false
     private let language: JournalLanguage
     private let notice: String?
     private let onSave: (JournalEntry) -> Void
@@ -38,7 +39,9 @@ struct ReviewDraftView: View {
 
                 Section {
                     DatePicker("Date", selection: $journalDate, displayedComponents: .date)
-                    EmojiSelector(selection: $emoji)
+                    EmojiSelector(selection: $emoji) {
+                        didManuallyChooseEmoji = true
+                    }
                 }
 
                 Section("Transcribed Journal") {
@@ -49,6 +52,9 @@ struct ReviewDraftView: View {
             .navigationTitle("Review Text Journal")
             .onChange(of: journalBody) { _, newValue in
                 title = processor.makeTitle(from: newValue, language: language)
+                if !didManuallyChooseEmoji {
+                    emoji = processor.moodEmoji(from: newValue, language: language)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -79,6 +85,7 @@ struct ReviewDraftView: View {
 
 struct EmojiSelector: View {
     @Binding var selection: String
+    var onSelect: (() -> Void)?
     private let emojis = ["🙂", "😊", "🥲", "😌", "😔", "😤", "🥰", "🤔", "😴", "✨"]
 
     var body: some View {
@@ -87,6 +94,7 @@ struct EmojiSelector: View {
                 ForEach(emojis, id: \.self) { emoji in
                     Button {
                         selection = emoji
+                        onSelect?()
                     } label: {
                         Text(emoji)
                             .font(.title2)

@@ -18,11 +18,41 @@ final class JournalProcessorTests: XCTestCase {
         XCTAssertEqual(result, "今天有点累，但是我还是完成了工作。")
     }
 
-    func testTitleUsesFirstEnglishSentence() {
+    func testTitleTurnsVoiceJournalTestIntoShortTitle() {
         let processor = JournalProcessor()
 
-        let title = processor.makeTitle(from: "I felt proud after finishing the project today. Then I rested.", language: .english)
+        let title = processor.makeTitle(
+            from: "Hey I wanted to test this voice journal app hopefully it's good",
+            language: .english
+        )
 
-        XCTAssertEqual(title, "I felt proud after finishing the project today")
+        XCTAssertEqual(title, "Testing Voice Journal")
+    }
+
+    func testTitleRecognizesAccomplishment() {
+        let processor = JournalProcessor()
+
+        let title = processor.makeTitle(from: "I finished a difficult project today.", language: .english)
+
+        XCTAssertEqual(title, "A Small Win")
+    }
+
+    func testMoodEmojiRecognizesHopefulJournal() {
+        let processor = JournalProcessor()
+
+        let emoji = processor.moodEmoji(
+            from: "I wanted to test this voice journal app. Hopefully it's good.",
+            language: .english
+        )
+
+        XCTAssertEqual(emoji, "😊")
+    }
+
+    func testMoodEmojiRecognizesTiredChineseJournal() {
+        let processor = JournalProcessor()
+
+        let emoji = processor.moodEmoji(from: "今天工作以后有点累。", language: .chinese)
+
+        XCTAssertEqual(emoji, "😴")
     }
 }
