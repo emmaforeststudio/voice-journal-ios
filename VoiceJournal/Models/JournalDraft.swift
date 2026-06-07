@@ -7,4 +7,5 @@ struct JournalDraft: Identifiable {
     var journalDate: Date
     var emoji: String
     var language: JournalLanguage
+    var notice: String?
 }

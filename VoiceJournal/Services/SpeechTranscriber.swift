@@ -12,12 +12,18 @@ final class SpeechTranscriber: ObservableObject {
             throw SpeechTranscriptionError.unsupportedLanguage
         }
 
+        let request = SFSpeechURLRecognitionRequest(url: url)
+
+#if targetEnvironment(simulator)
+        // The simulator does not advertise on-device recognition. Allow Apple's
+        // standard recognizer so the complete recording flow can be tested.
+        request.requiresOnDeviceRecognition = false
+#else
         guard recognizer.supportsOnDeviceRecognition else {
             throw SpeechTranscriptionError.onDeviceUnavailable
         }
-
-        let request = SFSpeechURLRecognitionRequest(url: url)
         request.requiresOnDeviceRecognition = true
+#endif
         request.shouldReportPartialResults = false
 
         return try await withCheckedThrowingContinuation { continuation in

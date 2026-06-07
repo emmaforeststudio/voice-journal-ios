@@ -8,7 +8,8 @@ struct JournalProcessor {
             body: cleaned,
             journalDate: date,
             emoji: "🙂",
-            language: language
+            language: language,
+            notice: nil
         )
     }
 

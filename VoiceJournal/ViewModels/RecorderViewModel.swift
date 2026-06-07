@@ -7,10 +7,12 @@ final class RecorderViewModel: ObservableObject {
     @Published var draft: JournalDraft?
     @Published var errorMessage: String?
     @Published var isProcessing = false
+    @Published private(set) var recordingDuration: TimeInterval = 0
 
     let recorder = AudioRecorder()
     private let transcriber = SpeechTranscriber()
     private let processor = JournalProcessor()
+    private var recordingTimer: AnyCancellable?
 
     var isRecording: Bool {
         recorder.isRecording
@@ -29,6 +31,7 @@ final class RecorderViewModel: ObservableObject {
         Task {
             do {
                 try await recorder.start()
+                startRecordingTimer()
                 objectWillChange.send()
             } catch {
                 errorMessage = error.localizedDescription
@@ -39,6 +42,7 @@ final class RecorderViewModel: ObservableObject {
     func stopRecording() {
         errorMessage = nil
         isProcessing = true
+        stopRecordingTimer()
 
         Task {
             do {
@@ -48,6 +52,14 @@ final class RecorderViewModel: ObservableObject {
                 draft = processor.makeDraft(from: transcript, language: selectedLanguage)
             } catch {
                 errorMessage = error.localizedDescription
+                draft = JournalDraft(
+                    title: "Untitled Journal",
+                    body: "",
+                    journalDate: .now,
+                    emoji: "🙂",
+                    language: selectedLanguage,
+                    notice: "The recording finished, but speech transcription was unavailable. You can type your journal below and save it."
+                )
             }
             isProcessing = false
             objectWillChange.send()
@@ -60,7 +72,27 @@ final class RecorderViewModel: ObservableObject {
             body: "",
             journalDate: .now,
             emoji: "🙂",
-            language: selectedLanguage
+            language: selectedLanguage,
+            notice: nil
         )
+    }
+
+    var formattedRecordingDuration: String {
+        let totalSeconds = Int(recordingDuration)
+        return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private func startRecordingTimer() {
+        recordingDuration = 0
+        recordingTimer = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.recordingDuration += 1
+            }
+    }
+
+    private func stopRecordingTimer() {
+        recordingTimer?.cancel()
+        recordingTimer = nil
     }
 }

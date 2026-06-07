@@ -7,6 +7,7 @@ struct ReviewDraftView: View {
     @State private var journalDate: Date
     @State private var emoji: String
     private let language: JournalLanguage
+    private let notice: String?
     private let onSave: (JournalEntry) -> Void
 
     init(draft: JournalDraft, onSave: @escaping (JournalEntry) -> Void) {
@@ -15,24 +16,32 @@ struct ReviewDraftView: View {
         _journalDate = State(initialValue: draft.journalDate)
         _emoji = State(initialValue: draft.emoji)
         language = draft.language
+        notice = draft.notice
         self.onSave = onSave
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if let notice {
+                    Section {
+                        Label(notice, systemImage: "exclamationmark.bubble")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section {
                     TextField("Title", text: $title)
                     DatePicker("Date", selection: $journalDate, displayedComponents: .date)
                     EmojiSelector(selection: $emoji)
                 }
 
-                Section("Journal") {
+                Section("Transcribed Journal") {
                     TextEditor(text: $journalBody)
                         .frame(minHeight: 220)
                 }
             }
-            .navigationTitle("Review")
+            .navigationTitle("Review Text Journal")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Discard") {

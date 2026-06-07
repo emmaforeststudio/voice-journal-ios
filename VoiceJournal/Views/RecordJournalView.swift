@@ -4,6 +4,11 @@ import SwiftUI
 struct RecordJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = RecorderViewModel()
+    let onSaved: () -> Void
+
+    init(onSaved: @escaping () -> Void = {}) {
+        self.onSaved = onSaved
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,6 +40,12 @@ struct RecordJournalView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+
+                    if viewModel.isRecording {
+                        Text(viewModel.formattedRecordingDuration)
+                            .font(.system(.title2, design: .monospaced, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 if viewModel.isProcessing {
@@ -63,6 +74,7 @@ struct RecordJournalView: View {
                     modelContext.insert(entry)
                     try? modelContext.save()
                     viewModel.draft = nil
+                    onSaved()
                 }
             }
         }
@@ -72,7 +84,7 @@ struct RecordJournalView: View {
         if viewModel.isProcessing {
             "Cleaning up your journal"
         } else if viewModel.isRecording {
-            "Recording your thoughts"
+            "Recording. Tap stop when you are finished."
         } else {
             "Tap to start a private voice journal"
         }
