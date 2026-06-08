@@ -71,4 +71,12 @@ final class JournalProcessorTests: XCTestCase {
 
         XCTAssertEqual(emoji, "😊")
     }
+
+    func testUnsupportedOpenAIEmojiFallsBackToDetectedMood() {
+        let processor = JournalProcessor()
+
+        let emoji = processor.normalizedMoodEmoji("😞", body: "I feel disappointed and sad.", language: .english)
+
+        XCTAssertEqual(emoji, "😔")
+    }
 }

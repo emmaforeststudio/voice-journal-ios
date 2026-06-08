@@ -1,6 +1,8 @@
 import Foundation
 
 struct JournalProcessor {
+    static let supportedMoodEmojis = ["🙂", "😊", "🥲", "😌", "😔", "😤", "🥰", "🤔", "😴", "✨"]
+
     func makeDraft(from rawText: String, language: JournalLanguage, date: Date = .now) -> JournalDraft {
         let cleaned = clean(rawText, language: language)
         return JournalDraft(
@@ -143,6 +145,10 @@ struct JournalProcessor {
         default:
             return "😔"
         }
+    }
+
+    func normalizedMoodEmoji(_ emoji: String, body: String, language: JournalLanguage) -> String {
+        Self.supportedMoodEmojis.contains(emoji) ? emoji : moodEmoji(from: body, language: language)
     }
 
     private func makeEnglishTitle(from body: String, firstSentence: String) -> String {

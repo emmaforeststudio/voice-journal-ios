@@ -1,15 +1,20 @@
 import AVFoundation
 import Combine
 import Foundation
+import Speech
 
 @MainActor
 final class AudioRecorder: NSObject, ObservableObject {
     @Published private(set) var isRecording = false
 
-    private var recorder: AVAudioRecorder?
+    private let audioEngine = AVAudioEngine()
+    private var audioFile: AVAudioFile?
+    private var recordingURL: URL?
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
 
     func prepare() async throws {
-        guard recorder == nil else { return }
+        guard !isRecording else { return }
 
         let granted = await requestMicrophonePermission()
         guard granted else { throw RecordingError.microphoneDenied }
@@ -17,34 +22,48 @@ final class AudioRecorder: NSObject, ObservableObject {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
         try session.setActive(true)
-
-        let url = Self.temporaryRecordingURL()
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44_100,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-
-        let recorder = try AVAudioRecorder(url: url, settings: settings)
-        recorder.prepareToRecord()
-        self.recorder = recorder
+        _ = await requestSpeechAuthorization()
     }
 
-    func start() async throws {
+    func start(onLiveTranscript: @escaping (String) -> Void) async throws {
         try await prepare()
-        guard let recorder else { throw RecordingError.notReady }
-        guard recorder.record() else { throw RecordingError.couldNotStart }
+
+        let inputNode = audioEngine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        guard format.channelCount > 0 else { throw RecordingError.notReady }
+
+        let url = Self.temporaryRecordingURL()
+        let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
+        let recognitionRequest = await makeLiveRecognitionRequest(onLiveTranscript: onLiveTranscript)
+
+        inputNode.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
+            try? audioFile.write(from: buffer)
+            recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try audioEngine.start()
+
+        self.audioFile = audioFile
+        self.recordingURL = url
+        self.recognitionRequest = recognitionRequest
         isRecording = true
     }
 
     func stop() throws -> URL {
-        guard let recorder else { throw RecordingError.notRecording }
-        recorder.stop()
-        self.recorder = nil
+        guard let recordingURL else { throw RecordingError.notRecording }
+
+        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionRequest = nil
+        recognitionTask = nil
+        audioFile = nil
+        self.recordingURL = nil
         isRecording = false
         try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        return recorder.url
+        return recordingURL
     }
 
     func deleteRecording(at url: URL) {
@@ -68,7 +87,35 @@ final class AudioRecorder: NSObject, ObservableObject {
     private static func temporaryRecordingURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("m4a")
+            .appendingPathExtension("wav")
+    }
+
+    private func makeLiveRecognitionRequest(onLiveTranscript: @escaping (String) -> Void) async -> SFSpeechAudioBufferRecognitionRequest? {
+        let authorization = await requestSpeechAuthorization()
+        guard authorization == .authorized else { return nil }
+
+        let recognizer = SFSpeechRecognizer() ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        guard let recognizer, recognizer.isAvailable else { return nil }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+
+        recognitionTask = recognizer.recognitionTask(with: request) { result, error in
+            guard error == nil, let result else { return }
+            Task { @MainActor in
+                onLiveTranscript(result.bestTranscription.formattedString)
+            }
+        }
+
+        return request
+    }
+
+    private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status)
+            }
+        }
     }
 }
 

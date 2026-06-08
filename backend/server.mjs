@@ -7,6 +7,7 @@ loadEnv(resolve(import.meta.dirname, ".env"));
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.OPENAI_API_KEY;
 const maxBodyBytes = 20 * 1024 * 1024;
+const supportedMoodEmojis = ["🙂", "😊", "🥲", "😌", "😔", "😤", "🥰", "🤔", "😴", "✨"];
 
 const server = createServer(async (request, response) => {
   try {
@@ -59,7 +60,7 @@ async function transcribe(audio) {
     "prompt",
     "This is a personal journal entry. Preserve the speaker's meaning and wording accurately."
   );
-  form.append("file", new Blob([audio], { type: "audio/mp4" }), "journal.m4a");
+  form.append("file", new Blob([audio], { type: "audio/wav" }), "journal.wav");
 
   const result = await openAIRequest("/v1/audio/transcriptions", {
     method: "POST",
@@ -89,7 +90,7 @@ async function polishJournal(transcript) {
             "Preserve the writer's meaning, facts, emotional tone, and first-person voice.",
             "Do not invent events, advice, interpretations, or details.",
             "Create a thoughtful, specific title of at most six words.",
-            "Choose exactly one emoji that best reflects the emotional tone.",
+            `Choose exactly one emoji from this set that best reflects the emotional tone: ${supportedMoodEmojis.join(" ")}`,
             "Detect whether the journal is primarily English or Chinese.",
             "Return the title and journal body in the same primary language as the speaker.",
           ].join(" "),
@@ -106,7 +107,7 @@ async function polishJournal(transcript) {
             properties: {
               title: { type: "string" },
               body: { type: "string" },
-              emoji: { type: "string" },
+              emoji: { type: "string", enum: supportedMoodEmojis },
               language: { type: "string", enum: ["english", "chinese"] },
             },
             required: ["title", "body", "emoji", "language"],

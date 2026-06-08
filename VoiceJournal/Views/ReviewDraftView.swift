@@ -85,7 +85,7 @@ struct ReviewDraftView: View {
 struct EmojiSelector: View {
     @Binding var selection: String
     var onSelect: (() -> Void)?
-    private let emojis = ["🙂", "😊", "🥲", "😌", "😔", "😤", "🥰", "🤔", "😴", "✨"]
+    private let emojis = JournalProcessor.supportedMoodEmojis
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {

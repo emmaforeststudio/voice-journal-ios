@@ -9,6 +9,7 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var isReadyToRecord = false
     @Published private(set) var isStartingRecording = false
     @Published private(set) var recordingDuration: TimeInterval = 0
+    @Published private(set) var liveTranscript = ""
 
     let recorder = AudioRecorder()
     private let openAIJournalService = OpenAIJournalService()
@@ -42,11 +43,14 @@ final class RecorderViewModel: ObservableObject {
 
     func startRecording() {
         errorMessage = nil
+        liveTranscript = ""
         isStartingRecording = true
         Task {
             defer { isStartingRecording = false }
             do {
-                try await recorder.start()
+                try await recorder.start { [weak self] transcript in
+                    self?.liveTranscript = transcript
+                }
                 isReadyToRecord = true
                 startRecordingTimer()
                 objectWillChange.send()
@@ -86,6 +90,7 @@ final class RecorderViewModel: ObservableObject {
                 )
             }
             isProcessing = false
+            liveTranscript = ""
             prepareForRecording()
             objectWillChange.send()
         }

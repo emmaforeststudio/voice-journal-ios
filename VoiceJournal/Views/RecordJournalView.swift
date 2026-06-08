@@ -41,6 +41,25 @@ struct RecordJournalView: View {
                     }
                 }
 
+                if viewModel.isRecording {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Live Preview")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ScrollView {
+                            Text(viewModel.liveTranscript.isEmpty ? "Listening..." : viewModel.liveTranscript)
+                                .font(.body)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .foregroundStyle(viewModel.liveTranscript.isEmpty ? .secondary : .primary)
+                        }
+                        .frame(maxHeight: 150)
+                    }
+                    .padding()
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
                 if viewModel.isProcessing {
                     ProgressView("Transcribing and shaping your journal")
                 }

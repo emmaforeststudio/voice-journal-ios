@@ -29,11 +29,12 @@ struct OpenAIJournalService {
 
         let journal = try JSONDecoder().decode(JournalResponse.self, from: data)
         let language = JournalLanguage(rawValue: journal.language) ?? .english
+        let emoji = JournalProcessor().normalizedMoodEmoji(journal.emoji, body: journal.body, language: language)
         return JournalDraft(
             title: journal.title,
             body: journal.body,
             journalDate: .now,
-            emoji: journal.emoji,
+            emoji: emoji,
             language: language,
             notice: nil
         )
