@@ -7,7 +7,7 @@ This local backend keeps the OpenAI API key off the iPhone and out of GitHub.
 3. Start the backend:
 
 ```sh
-node backend/server.mjs
+./backend/start.sh
 ```
 
 4. Verify it from the Mac:
