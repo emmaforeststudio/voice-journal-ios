@@ -4,6 +4,26 @@ import Speech
 
 @MainActor
 final class SpeechTranscriber: ObservableObject {
+    func transcribeAudioAutomatically(at url: URL) async throws -> (text: String, language: JournalLanguage) {
+        async let englishResult = try? transcribeAudio(at: url, language: .english)
+        async let chineseResult = try? transcribeAudio(at: url, language: .chinese)
+
+        let (english, chinese) = await (englishResult, chineseResult)
+        if let chinese, chinese.hanCharacterCount >= 2 {
+            return (chinese, .chinese)
+        }
+
+        if let english, !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return (english, .english)
+        }
+
+        if let chinese, !chinese.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return (chinese, .chinese)
+        }
+
+        throw SpeechTranscriptionError.emptyResult
+    }
+
     func transcribeAudio(at url: URL, language: JournalLanguage) async throws -> String {
         let authorization = await requestSpeechAuthorization()
         guard authorization == .authorized else { throw SpeechTranscriptionError.permissionDenied }
@@ -60,6 +80,14 @@ final class SpeechTranscriber: ObservableObject {
                 continuation.resume(returning: status)
             }
         }
+    }
+}
+
+private extension String {
+    var hanCharacterCount: Int {
+        unicodeScalars.filter { scalar in
+            (0x4E00...0x9FFF).contains(scalar.value)
+        }.count
     }
 }
 

@@ -7,12 +7,9 @@ struct OpenAIJournalService {
         self.session = session
     }
 
-    func makeDraft(from audioURL: URL, language: JournalLanguage) async throws -> JournalDraft {
+    func makeDraft(from audioURL: URL) async throws -> JournalDraft {
         let audioData = try Data(contentsOf: audioURL)
-        let requestBody = JournalRequest(
-            audioBase64: audioData.base64EncodedString(),
-            language: language.rawValue
-        )
+        let requestBody = JournalRequest(audioBase64: audioData.base64EncodedString())
 
         var request = URLRequest(url: try backendURL().appendingPathComponent("journal"))
         request.httpMethod = "POST"
@@ -31,6 +28,7 @@ struct OpenAIJournalService {
         }
 
         let journal = try JSONDecoder().decode(JournalResponse.self, from: data)
+        let language = JournalLanguage(rawValue: journal.language) ?? .english
         return JournalDraft(
             title: journal.title,
             body: journal.body,
@@ -55,13 +53,13 @@ struct OpenAIJournalService {
 
 private struct JournalRequest: Encodable {
     let audioBase64: String
-    let language: String
 }
 
 private struct JournalResponse: Decodable {
     let title: String
     let body: String
     let emoji: String
+    let language: String
 }
 
 private struct BackendError: Decodable {

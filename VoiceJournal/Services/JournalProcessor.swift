@@ -120,6 +120,31 @@ struct JournalProcessor {
         }
     }
 
+    func dailyMoodEmoji(from emojis: [String]) -> String? {
+        guard !emojis.isEmpty else { return nil }
+
+        let scores: [String: Double] = [
+            "🥰": 2, "😊": 2, "✨": 2,
+            "🙂": 1, "😌": 0.75,
+            "🤔": 0, "🥲": -0.5,
+            "😴": -1, "😔": -2, "😤": -2
+        ]
+        let average = emojis.map { scores[$0] ?? 0 }.reduce(0, +) / Double(emojis.count)
+
+        switch average {
+        case 1.5...:
+            return "😊"
+        case 0.4..<1.5:
+            return "🙂"
+        case -0.4..<0.4:
+            return "😌"
+        case -1.4 ..< -0.4:
+            return "🥲"
+        default:
+            return "😔"
+        }
+    }
+
     private func makeEnglishTitle(from body: String, firstSentence: String) -> String {
         let lowered = body.lowercased()
 

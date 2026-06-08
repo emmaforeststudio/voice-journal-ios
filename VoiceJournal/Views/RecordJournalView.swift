@@ -13,13 +13,6 @@ struct RecordJournalView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 28) {
-                Picker("Language", selection: $viewModel.selectedLanguage) {
-                    ForEach(JournalLanguage.allCases) { language in
-                        Text(language.displayName).tag(language)
-                    }
-                }
-                .pickerStyle(.segmented)
-
                 Spacer()
 
                 VStack(spacing: 16) {
@@ -34,7 +27,7 @@ struct RecordJournalView: View {
                             .clipShape(Circle())
                     }
                     .accessibilityLabel(viewModel.isRecording ? "Stop recording" : "Start recording")
-                    .disabled(viewModel.isProcessing)
+                    .disabled(viewModel.isProcessing || viewModel.isStartingRecording || (!viewModel.isReadyToRecord && !viewModel.isRecording))
 
                     Text(statusText)
                         .font(.headline)
@@ -69,6 +62,9 @@ struct RecordJournalView: View {
             }
             .padding(24)
             .navigationTitle("New Journal")
+            .task {
+                viewModel.prepareForRecording()
+            }
             .sheet(item: $viewModel.draft) { draft in
                 ReviewDraftView(draft: draft) { entry in
                     modelContext.insert(entry)
@@ -83,10 +79,14 @@ struct RecordJournalView: View {
     private var statusText: String {
         if viewModel.isProcessing {
             "Cleaning up your journal"
+        } else if viewModel.isStartingRecording {
+            "Starting recording..."
         } else if viewModel.isRecording {
             "Recording. Tap stop when you are finished."
+        } else if viewModel.isReadyToRecord {
+            "Ready. Tap to start your voice journal."
         } else {
-            "Tap to start a private voice journal"
+            "Preparing microphone..."
         }
     }
 }

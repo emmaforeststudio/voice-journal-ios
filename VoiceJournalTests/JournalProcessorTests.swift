@@ -55,4 +55,20 @@ final class JournalProcessorTests: XCTestCase {
 
         XCTAssertEqual(emoji, "😴")
     }
+
+    func testDailyMoodBalancesMostlyHappyEntries() {
+        let processor = JournalProcessor()
+
+        let emoji = processor.dailyMoodEmoji(from: ["😊", "😊", "😊", "😊", "😊", "😔"])
+
+        XCTAssertEqual(emoji, "🙂")
+    }
+
+    func testDailyMoodShowsStrongHappinessWhenConsistent() {
+        let processor = JournalProcessor()
+
+        let emoji = processor.dailyMoodEmoji(from: ["😊", "🥰", "✨"])
+
+        XCTAssertEqual(emoji, "😊")
+    }
 }

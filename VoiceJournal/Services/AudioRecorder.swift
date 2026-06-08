@@ -8,7 +8,9 @@ final class AudioRecorder: NSObject, ObservableObject {
 
     private var recorder: AVAudioRecorder?
 
-    func start() async throws {
+    func prepare() async throws {
+        guard recorder == nil else { return }
+
         let granted = await requestMicrophonePermission()
         guard granted else { throw RecordingError.microphoneDenied }
 
@@ -26,8 +28,13 @@ final class AudioRecorder: NSObject, ObservableObject {
 
         let recorder = try AVAudioRecorder(url: url, settings: settings)
         recorder.prepareToRecord()
-        recorder.record()
         self.recorder = recorder
+    }
+
+    func start() async throws {
+        try await prepare()
+        guard let recorder else { throw RecordingError.notReady }
+        guard recorder.record() else { throw RecordingError.couldNotStart }
         isRecording = true
     }
 
@@ -67,12 +74,18 @@ final class AudioRecorder: NSObject, ObservableObject {
 
 enum RecordingError: LocalizedError {
     case microphoneDenied
+    case notReady
+    case couldNotStart
     case notRecording
 
     var errorDescription: String? {
         switch self {
         case .microphoneDenied:
             "Microphone permission is required to record a journal."
+        case .notReady:
+            "The microphone is not ready yet."
+        case .couldNotStart:
+            "The recording could not start."
         case .notRecording:
             "There is no active recording to stop."
         }

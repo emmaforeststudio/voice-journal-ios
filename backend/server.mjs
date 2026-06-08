@@ -28,15 +28,14 @@ const server = createServer(async (request, response) => {
     }
 
     const body = await readJSONBody(request);
-    const language = body.language === "chinese" ? "chinese" : "english";
     const audio = Buffer.from(body.audioBase64 || "", "base64");
 
     if (audio.length === 0) {
       return sendJSON(response, 400, { error: "Audio is required" });
     }
 
-    const transcript = await transcribe(audio, language);
-    const journal = await polishJournal(transcript, language);
+    const transcript = await transcribe(audio);
+    const journal = await polishJournal(transcript);
 
     return sendJSON(response, 200, { transcript, ...journal });
   } catch (error) {
@@ -52,10 +51,9 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`OpenAI API key configured: ${Boolean(apiKey)}`);
 });
 
-async function transcribe(audio, language) {
+async function transcribe(audio) {
   const form = new FormData();
   form.append("model", "gpt-4o-mini-transcribe");
-  form.append("language", language === "chinese" ? "zh" : "en");
   form.append("response_format", "json");
   form.append(
     "prompt",
@@ -75,12 +73,7 @@ async function transcribe(audio, language) {
   return result.text.trim();
 }
 
-async function polishJournal(transcript, language) {
-  const languageInstruction =
-    language === "chinese"
-      ? "Return the title and journal body in Simplified Chinese."
-      : "Return the title and journal body in English.";
-
+async function polishJournal(transcript) {
   const result = await openAIRequest("/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -97,7 +90,8 @@ async function polishJournal(transcript, language) {
             "Do not invent events, advice, interpretations, or details.",
             "Create a thoughtful, specific title of at most six words.",
             "Choose exactly one emoji that best reflects the emotional tone.",
-            languageInstruction,
+            "Detect whether the journal is primarily English or Chinese.",
+            "Return the title and journal body in the same primary language as the speaker.",
           ].join(" "),
         },
         { role: "user", content: transcript },
@@ -113,8 +107,9 @@ async function polishJournal(transcript, language) {
               title: { type: "string" },
               body: { type: "string" },
               emoji: { type: "string" },
+              language: { type: "string", enum: ["english", "chinese"] },
             },
-            required: ["title", "body", "emoji"],
+            required: ["title", "body", "emoji", "language"],
             additionalProperties: false,
           },
         },

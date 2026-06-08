@@ -3,10 +3,11 @@ import Foundation
 
 @MainActor
 final class RecorderViewModel: ObservableObject {
-    @Published var selectedLanguage: JournalLanguage = .english
     @Published var draft: JournalDraft?
     @Published var errorMessage: String?
     @Published var isProcessing = false
+    @Published private(set) var isReadyToRecord = false
+    @Published private(set) var isStartingRecording = false
     @Published private(set) var recordingDuration: TimeInterval = 0
 
     let recorder = AudioRecorder()
@@ -19,6 +20,18 @@ final class RecorderViewModel: ObservableObject {
         recorder.isRecording
     }
 
+    func prepareForRecording() {
+        guard !isReadyToRecord, !isStartingRecording, !isRecording else { return }
+        Task {
+            do {
+                try await recorder.prepare()
+                isReadyToRecord = true
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     func toggleRecording() {
         if isRecording {
             stopRecording()
@@ -29,9 +42,12 @@ final class RecorderViewModel: ObservableObject {
 
     func startRecording() {
         errorMessage = nil
+        isStartingRecording = true
         Task {
+            defer { isStartingRecording = false }
             do {
                 try await recorder.start()
+                isReadyToRecord = true
                 startRecordingTimer()
                 objectWillChange.send()
             } catch {
@@ -49,11 +65,12 @@ final class RecorderViewModel: ObservableObject {
             do {
                 let url = try recorder.stop()
                 defer { recorder.deleteRecording(at: url) }
+                isReadyToRecord = false
                 do {
-                    draft = try await openAIJournalService.makeDraft(from: url, language: selectedLanguage)
+                    draft = try await openAIJournalService.makeDraft(from: url)
                 } catch {
-                    let transcript = try await transcriber.transcribeAudio(at: url, language: selectedLanguage)
-                    var fallbackDraft = processor.makeDraft(from: transcript, language: selectedLanguage)
+                    let fallback = try await transcriber.transcribeAudioAutomatically(at: url)
+                    var fallbackDraft = processor.makeDraft(from: fallback.text, language: fallback.language)
                     fallbackDraft.notice = "OpenAI enhancement was unavailable, so this journal was transcribed and processed on your iPhone. \(error.localizedDescription)"
                     draft = fallbackDraft
                 }
@@ -64,11 +81,12 @@ final class RecorderViewModel: ObservableObject {
                     body: "",
                     journalDate: .now,
                     emoji: "🙂",
-                    language: selectedLanguage,
+                    language: .english,
                     notice: "The recording finished, but speech transcription was unavailable: \(error.localizedDescription) You can type your journal below and save it."
                 )
             }
             isProcessing = false
+            prepareForRecording()
             objectWillChange.send()
         }
     }
@@ -79,7 +97,7 @@ final class RecorderViewModel: ObservableObject {
             body: "",
             journalDate: .now,
             emoji: "🙂",
-            language: selectedLanguage,
+            language: .english,
             notice: nil
         )
     }

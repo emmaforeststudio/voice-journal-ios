@@ -8,6 +8,7 @@ struct CalendarJournalView: View {
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
+    private let processor = JournalProcessor()
 
     var body: some View {
         NavigationStack {
@@ -65,7 +66,7 @@ struct CalendarJournalView: View {
                     CalendarDayCell(
                         date: date,
                         isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                        emojis: emojis(on: date)
+                        emoji: emoji(on: date)
                     )
                     .onTapGesture {
                         selectedDate = date
@@ -121,21 +122,21 @@ struct CalendarJournalView: View {
         entries.filter { calendar.isDate($0.journalDate, inSameDayAs: date) }
     }
 
-    private func emojis(on date: Date) -> [String] {
-        Array(entries(on: date).prefix(3).map(\.emoji))
+    private func emoji(on date: Date) -> String? {
+        processor.dailyMoodEmoji(from: entries(on: date).map(\.emoji))
     }
 }
 
 struct CalendarDayCell: View {
     let date: Date
     let isSelected: Bool
-    let emojis: [String]
+    let emoji: String?
 
     var body: some View {
         VStack(spacing: 4) {
             Text(date.formatted(.dateTime.day()))
                 .font(.callout.weight(isSelected ? .bold : .regular))
-            Text(emojis.joined())
+            Text(emoji ?? "")
                 .font(.caption)
                 .lineLimit(1)
                 .frame(height: 14)
