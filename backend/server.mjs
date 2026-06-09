@@ -50,6 +50,11 @@ const server = createServer(async (request, response) => {
       return sendJSON(response, 200, { transcript });
     }
     const journal = await polishJournal(transcript, body.livePreviewTranscript);
+    try {
+      journal.body = await structureJournalBody(journal.body);
+    } catch (error) {
+      console.error("Paragraph structuring failed; returning the complete polished journal.", error);
+    }
 
     return sendJSON(response, 200, { transcript, ...journal });
   } catch (error) {
@@ -111,12 +116,7 @@ async function polishJournal(transcript, livePreviewTranscript = "") {
             "Preserve every distinct thought found in either source, while removing duplicated wording that appears in both.",
             "Never discard an earlier topic merely because it appears only in the live preview.",
             "Keep thoughts in their spoken order; when the live preview recovers earlier speech, place it before a final-only ending.",
-            "Organize the journal into natural paragraphs based on meaningful changes in topic, event, time, or emotion.",
-            "Return each paragraph as a separate item in the paragraphs array.",
-            "When there are two clearly different events or topics, return them as separate paragraphs even if each one is brief.",
-            "A clear time transition combined with a change of activity, such as moving from a morning family event to afternoon work, starts a new paragraph.",
-            "Strong time-transition phrases such as later, afterward, in the afternoon, or their equivalents must begin a new paragraph.",
-            "Keep one paragraph when the journal contains only one coherent thought, and do not over-segment the writing.",
+            "Keep distinct topics, events, time periods, and emotional reflections as separate sentences; do not join them into one long sentence.",
             "Do not add headings, bullet points, numbered lists, or other formatting to the journal body.",
             "Create a thoughtful, specific title of at most six words.",
             "Do not put emoji in the title or journal body; use only the dedicated emoji field.",
@@ -145,14 +145,11 @@ async function polishJournal(transcript, livePreviewTranscript = "") {
             type: "object",
             properties: {
               title: { type: "string" },
-              paragraphs: {
-                type: "array",
-                items: { type: "string" },
-              },
+              body: { type: "string" },
               emoji: { type: "string", enum: supportedMoodEmojis },
               language: { type: "string", enum: supportedLanguages },
             },
-            required: ["title", "paragraphs", "emoji", "language"],
+            required: ["title", "body", "emoji", "language"],
             additionalProperties: false,
           },
         },
@@ -166,19 +163,116 @@ async function polishJournal(transcript, livePreviewTranscript = "") {
   }
 
   const journal = JSON.parse(content);
-  const paragraphs = Array.isArray(journal.paragraphs)
-    ? journal.paragraphs.map((paragraph) => paragraph.trim()).filter(Boolean)
-    : [];
-  if (paragraphs.length === 0) {
-    throw new Error("OpenAI did not return any journal paragraphs.");
-  }
-
   return {
     title: journal.title,
-    body: paragraphs.join("\n\n"),
+    body: journal.body.trim(),
     emoji: journal.emoji,
     language: journal.language,
   };
+}
+
+async function structureJournalBody(body) {
+  const sentences = segmentSentences(body);
+  if (sentences.length < 2) return body.trim();
+
+  const numberedSentences = sentences
+    .map((sentence, index) => `${index + 1}. ${sentence}`)
+    .join("\n");
+  const result = await openAIRequest("/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "Your only task is to choose semantic paragraph breaks for a personal journal.",
+            "The journal is provided as numbered sentences.",
+            "Return the sentence numbers that should END paragraphs.",
+            "A paragraph should contain one coherent topic, event, time period, or emotional reflection.",
+            "Start a new paragraph whenever the speaker changes subject, activity, event, time period, or emotional focus.",
+            "Strong transitions such as later, afterward, in the afternoon, speaking of something else, or their equivalents normally begin a new paragraph.",
+            "For a journal with two or more distinct subjects, you must create two or more paragraphs.",
+            "For journals with four or more sentences, prefer two to four readable paragraphs unless every sentence develops one focused thought.",
+            "Use one paragraph only when the entire journal genuinely discusses one focused thought.",
+            "Always include the final sentence number as the final paragraph ending.",
+            "Do not rewrite, summarize, remove, reorder, or add any text.",
+          ].join(" "),
+        },
+        { role: "user", content: numberedSentences },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "journal_paragraph_breaks",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              paragraphEndSentenceNumbers: {
+                type: "array",
+                items: { type: "integer" },
+              },
+            },
+            required: ["paragraphEndSentenceNumbers"],
+            additionalProperties: false,
+          },
+        },
+      },
+    }),
+  });
+
+  const content = result.choices?.[0]?.message?.content;
+  if (!content) return body.trim();
+
+  const requestedBreaks = JSON.parse(content).paragraphEndSentenceNumbers;
+  const breaks = new Set(
+    Array.isArray(requestedBreaks)
+      ? requestedBreaks.filter(
+          (value) => Number.isInteger(value) && value > 0 && value <= sentences.length
+        )
+      : []
+  );
+  addStrongTransitionBreaks(sentences, breaks);
+  breaks.add(sentences.length);
+
+  const paragraphs = [];
+  let current = [];
+  for (const [index, sentence] of sentences.entries()) {
+    current.push(sentence);
+    if (breaks.has(index + 1)) {
+      paragraphs.push(current.join(" "));
+      current = [];
+    }
+  }
+
+  return paragraphs.join("\n\n").trim();
+}
+
+function addStrongTransitionBreaks(sentences, breaks) {
+  const transitionPattern = /^(later\b|afterward\b|afterwards\b|subsequently\b|in the (afternoon|evening)\b|that (afternoon|evening|night)\b|后来|之后|随后|下午|晚上|그 후|나중에|오후에는|저녁에는|その後|後で|午後は|夜は|später\b|danach\b|anschließend\b|am (nachmittag|abend)\b|plus tard\b|ensuite\b|après cela\b|dans l['’](après-midi|soirée)\b|más tarde\b|después\b|posteriormente\b|por la (tarde|noche)\b)/i;
+
+  for (let index = 1; index < sentences.length; index += 1) {
+    if (transitionPattern.test(sentences[index])) {
+      breaks.add(index);
+    }
+  }
+}
+
+function segmentSentences(body) {
+  const normalized = body
+    .replace(/\r\n/g, "\n")
+    .replace(/\n+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+  if (!normalized) return [];
+
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "sentence" });
+  return [...segmenter.segment(normalized)]
+    .map(({ segment }) => segment.trim())
+    .filter(Boolean);
 }
 
 async function openAIRequest(path, options) {
