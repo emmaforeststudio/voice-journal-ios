@@ -85,6 +85,7 @@ final class RecorderViewModel: ObservableObject {
         isProcessing = true
         stopRecordingTimer()
         stopPreviewTimer()
+        let latestLiveTranscript = liveTranscript
 
         Task {
             do {
@@ -92,7 +93,10 @@ final class RecorderViewModel: ObservableObject {
                 defer { recorder.deleteRecording(at: url) }
                 isReadyToRecord = false
                 do {
-                    draft = try await openAIJournalService.makeDraft(from: url)
+                    draft = try await openAIJournalService.makeDraft(
+                        from: url,
+                        livePreviewTranscript: latestLiveTranscript
+                    )
                 } catch {
                     let fallback = try await transcriber.transcribeAudioAutomatically(at: url)
                     var fallbackDraft = processor.makeDraft(from: fallback.text, language: fallback.language)

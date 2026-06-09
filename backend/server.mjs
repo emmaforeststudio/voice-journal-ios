@@ -49,7 +49,7 @@ const server = createServer(async (request, response) => {
     if (request.url === "/preview") {
       return sendJSON(response, 200, { transcript });
     }
-    const journal = await polishJournal(transcript);
+    const journal = await polishJournal(transcript, body.livePreviewTranscript);
 
     return sendJSON(response, 200, { transcript, ...journal });
   } catch (error) {
@@ -88,7 +88,10 @@ async function transcribe(audio, allowEmpty = false) {
   return result.text.trim();
 }
 
-async function polishJournal(transcript) {
+async function polishJournal(transcript, livePreviewTranscript = "") {
+  const preview = typeof livePreviewTranscript === "string"
+    ? livePreviewTranscript.trim()
+    : "";
   const result = await openAIRequest("/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -103,8 +106,16 @@ async function polishJournal(transcript) {
             "Correct obvious transcription mistakes only when context makes the correction clear.",
             "Preserve the writer's meaning, facts, emotional tone, and first-person voice.",
             "Do not invent events, advice, interpretations, or details.",
+            "The final audio transcription is the primary source.",
+            "The latest live preview is a recovery source that may contain earlier speech omitted from the final transcription.",
+            "Preserve every distinct thought found in either source, while removing duplicated wording that appears in both.",
+            "Never discard an earlier topic merely because it appears only in the live preview.",
+            "Keep thoughts in their spoken order; when the live preview recovers earlier speech, place it before a final-only ending.",
             "Organize the journal into natural paragraphs based on meaningful changes in topic, event, time, or emotion.",
-            "Use a blank line between paragraphs.",
+            "Return each paragraph as a separate item in the paragraphs array.",
+            "When there are two clearly different events or topics, return them as separate paragraphs even if each one is brief.",
+            "A clear time transition combined with a change of activity, such as moving from a morning family event to afternoon work, starts a new paragraph.",
+            "Strong time-transition phrases such as later, afterward, in the afternoon, or their equivalents must begin a new paragraph.",
             "Keep one paragraph when the journal contains only one coherent thought, and do not over-segment the writing.",
             "Do not add headings, bullet points, numbered lists, or other formatting to the journal body.",
             "Create a thoughtful, specific title of at most six words.",
@@ -114,7 +125,16 @@ async function polishJournal(transcript) {
             "The title and journal body must both be written in the same primary language as the speaker.",
           ].join(" "),
         },
-        { role: "user", content: transcript },
+        {
+          role: "user",
+          content: [
+            "FINAL AUDIO TRANSCRIPTION:",
+            transcript,
+            "",
+            "LATEST LIVE PREVIEW:",
+            preview || "(unavailable)",
+          ].join("\n"),
+        },
       ],
       response_format: {
         type: "json_schema",
@@ -125,11 +145,14 @@ async function polishJournal(transcript) {
             type: "object",
             properties: {
               title: { type: "string" },
-              body: { type: "string" },
+              paragraphs: {
+                type: "array",
+                items: { type: "string" },
+              },
               emoji: { type: "string", enum: supportedMoodEmojis },
               language: { type: "string", enum: supportedLanguages },
             },
-            required: ["title", "body", "emoji", "language"],
+            required: ["title", "paragraphs", "emoji", "language"],
             additionalProperties: false,
           },
         },
@@ -142,7 +165,20 @@ async function polishJournal(transcript) {
     throw new Error("OpenAI did not return a polished journal.");
   }
 
-  return JSON.parse(content);
+  const journal = JSON.parse(content);
+  const paragraphs = Array.isArray(journal.paragraphs)
+    ? journal.paragraphs.map((paragraph) => paragraph.trim()).filter(Boolean)
+    : [];
+  if (paragraphs.length === 0) {
+    throw new Error("OpenAI did not return any journal paragraphs.");
+  }
+
+  return {
+    title: journal.title,
+    body: paragraphs.join("\n\n"),
+    emoji: journal.emoji,
+    language: journal.language,
+  };
 }
 
 async function openAIRequest(path, options) {

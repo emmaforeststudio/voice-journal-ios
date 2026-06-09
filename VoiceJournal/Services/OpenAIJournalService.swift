@@ -7,9 +7,12 @@ struct OpenAIJournalService {
         self.session = session
     }
 
-    func makeDraft(from audioURL: URL) async throws -> JournalDraft {
+    func makeDraft(from audioURL: URL, livePreviewTranscript: String = "") async throws -> JournalDraft {
         let audioData = try Data(contentsOf: audioURL)
-        let requestBody = JournalRequest(audioBase64: audioData.base64EncodedString())
+        let requestBody = JournalRequest(
+            audioBase64: audioData.base64EncodedString(),
+            livePreviewTranscript: livePreviewTranscript
+        )
 
         var request = URLRequest(url: try backendURL().appendingPathComponent("journal"))
         request.httpMethod = "POST"
@@ -77,6 +80,7 @@ struct OpenAIJournalService {
 
 private struct JournalRequest: Encodable {
     let audioBase64: String
+    var livePreviewTranscript = ""
 }
 
 private struct JournalResponse: Decodable {
