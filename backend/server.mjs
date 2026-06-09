@@ -8,6 +8,16 @@ const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.OPENAI_API_KEY;
 const maxBodyBytes = 20 * 1024 * 1024;
 const supportedMoodEmojis = ["🙂", "😊", "🥲", "😌", "😔", "😤", "🥰", "🤔", "😴", "✨"];
+const supportedLanguages = [
+  "english",
+  "chinese",
+  "korean",
+  "japanese",
+  "german",
+  "french",
+  "spanish",
+  "other",
+];
 
 const server = createServer(async (request, response) => {
   try {
@@ -93,8 +103,9 @@ async function polishJournal(transcript) {
             "Preserve the writer's meaning, facts, emotional tone, and first-person voice.",
             "Do not invent events, advice, interpretations, or details.",
             "Create a thoughtful, specific title of at most six words.",
+            "Do not put emoji in the title or journal body; use only the dedicated emoji field.",
             `Choose exactly one emoji from this set that best reflects the emotional tone: ${supportedMoodEmojis.join(" ")}`,
-            "Classify the primary language as English, Chinese, or other.",
+            "Classify the primary language using exactly one of these labels: english, chinese, korean, japanese, german, french, spanish, other.",
             "The title and journal body must both be written in the same primary language as the speaker.",
           ].join(" "),
         },
@@ -111,7 +122,7 @@ async function polishJournal(transcript) {
               title: { type: "string" },
               body: { type: "string" },
               emoji: { type: "string", enum: supportedMoodEmojis },
-              language: { type: "string", enum: ["english", "chinese", "other"] },
+              language: { type: "string", enum: supportedLanguages },
             },
             required: ["title", "body", "emoji", "language"],
             additionalProperties: false,

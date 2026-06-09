@@ -80,11 +80,21 @@ final class JournalProcessorTests: XCTestCase {
         XCTAssertEqual(emoji, "😔")
     }
 
-    func testOtherLanguageFallbackPreservesOriginalText() {
+    func testFrenchFallbackPreservesOriginalText() {
         let processor = JournalProcessor()
         let french = "Aujourd'hui, je suis heureuse."
 
-        XCTAssertEqual(processor.clean(french, language: .other), french)
-        XCTAssertEqual(processor.makeTitle(from: french, language: .other), "Aujourd'hui, je suis heureuse")
+        XCTAssertEqual(processor.clean(french, language: .french), french)
+        XCTAssertEqual(processor.makeTitle(from: french, language: .french), "Aujourd'hui, je suis heureuse")
+    }
+
+    func testRequestedLanguagesHaveExpectedLocales() {
+        XCTAssertEqual(JournalLanguage.english.localeIdentifier, "en-US")
+        XCTAssertEqual(JournalLanguage.chinese.localeIdentifier, "zh-Hans")
+        XCTAssertEqual(JournalLanguage.korean.localeIdentifier, "ko-KR")
+        XCTAssertEqual(JournalLanguage.japanese.localeIdentifier, "ja-JP")
+        XCTAssertEqual(JournalLanguage.german.localeIdentifier, "de-DE")
+        XCTAssertEqual(JournalLanguage.french.localeIdentifier, "fr-FR")
+        XCTAssertEqual(JournalLanguage.spanish.localeIdentifier, "es-ES")
     }
 }

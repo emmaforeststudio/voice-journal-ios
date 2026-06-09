@@ -24,7 +24,7 @@ struct JournalProcessor {
             text = cleanEnglish(text)
         case .chinese:
             text = cleanChinese(text)
-        case .other:
+        case .korean, .japanese, .german, .french, .spanish, .other:
             break
         }
 
@@ -46,7 +46,7 @@ struct JournalProcessor {
             return makeEnglishTitle(from: trimmed, firstSentence: firstSentence)
         case .chinese:
             return makeChineseTitle(from: trimmed, firstSentence: firstSentence)
-        case .other:
+        case .korean, .japanese, .german, .french, .spanish, .other:
             return String(firstSentence.prefix(40))
         }
     }
@@ -123,7 +123,7 @@ struct JournalProcessor {
             }
 
             return "🙂"
-        case .other:
+        case .korean, .japanese, .german, .french, .spanish, .other:
             return "🙂"
         }
     }
