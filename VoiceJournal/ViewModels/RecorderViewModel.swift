@@ -10,13 +10,15 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var isStartingRecording = false
     @Published private(set) var recordingDuration: TimeInterval = 0
     @Published private(set) var liveTranscript = ""
-    @Published private(set) var liveTranscriptLanguage: JournalLanguage?
+    @Published private(set) var livePreviewNotice: String?
 
     let recorder = AudioRecorder()
     private let openAIJournalService = OpenAIJournalService()
     private let transcriber = SpeechTranscriber()
     private let processor = JournalProcessor()
     private var recordingTimer: AnyCancellable?
+    private var previewTimer: AnyCancellable?
+    private var isLoadingPreview = false
 
     var isRecording: Bool {
         recorder.isRecording
@@ -45,17 +47,16 @@ final class RecorderViewModel: ObservableObject {
     func startRecording() {
         errorMessage = nil
         liveTranscript = ""
-        liveTranscriptLanguage = nil
+        livePreviewNotice = nil
         isStartingRecording = true
         Task {
             defer { isStartingRecording = false }
             do {
-                try await recorder.start { [weak self] transcript, language in
-                    self?.liveTranscript = transcript
-                    self?.liveTranscriptLanguage = language
-                }
+                try await recorder.start()
                 isReadyToRecord = true
                 startRecordingTimer()
+                startPreviewTimer()
+                scheduleInitialPreview()
                 objectWillChange.send()
             } catch {
                 errorMessage = error.localizedDescription
@@ -67,6 +68,7 @@ final class RecorderViewModel: ObservableObject {
         errorMessage = nil
         isProcessing = true
         stopRecordingTimer()
+        stopPreviewTimer()
 
         Task {
             do {
@@ -94,7 +96,7 @@ final class RecorderViewModel: ObservableObject {
             }
             isProcessing = false
             liveTranscript = ""
-            liveTranscriptLanguage = nil
+            livePreviewNotice = nil
             prepareForRecording()
             objectWillChange.send()
         }
@@ -128,5 +130,45 @@ final class RecorderViewModel: ObservableObject {
     private func stopRecordingTimer() {
         recordingTimer?.cancel()
         recordingTimer = nil
+    }
+
+    private func startPreviewTimer() {
+        previewTimer?.cancel()
+        previewTimer = Timer.publish(every: 3, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refreshLivePreview()
+            }
+    }
+
+    private func scheduleInitialPreview() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            refreshLivePreview()
+        }
+    }
+
+    private func stopPreviewTimer() {
+        previewTimer?.cancel()
+        previewTimer = nil
+        isLoadingPreview = false
+    }
+
+    private func refreshLivePreview() {
+        guard !isLoadingPreview, isRecording, let url = recorder.currentRecordingURL else { return }
+        isLoadingPreview = true
+
+        Task {
+            defer { isLoadingPreview = false }
+            do {
+                let transcript = try await openAIJournalService.previewTranscript(from: url)
+                if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    liveTranscript = transcript
+                    livePreviewNotice = nil
+                }
+            } catch {
+                livePreviewNotice = "Live preview cannot reach the transcription service. Your audio is still recording."
+            }
+        }
     }
 }

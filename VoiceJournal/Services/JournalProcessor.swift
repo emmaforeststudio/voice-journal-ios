@@ -24,6 +24,8 @@ struct JournalProcessor {
             text = cleanEnglish(text)
         case .chinese:
             text = cleanChinese(text)
+        case .other:
+            break
         }
 
         return normalizeWhitespace(text)
@@ -44,6 +46,8 @@ struct JournalProcessor {
             return makeEnglishTitle(from: trimmed, firstSentence: firstSentence)
         case .chinese:
             return makeChineseTitle(from: trimmed, firstSentence: firstSentence)
+        case .other:
+            return String(firstSentence.prefix(40))
         }
     }
 
@@ -118,6 +122,8 @@ struct JournalProcessor {
                 return "😌"
             }
 
+            return "🙂"
+        case .other:
             return "🙂"
         }
     }

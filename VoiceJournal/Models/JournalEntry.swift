@@ -41,6 +41,7 @@ final class JournalEntry {
 enum JournalLanguage: String, CaseIterable, Codable, Identifiable {
     case english
     case chinese
+    case other
 
     var id: String { rawValue }
 
@@ -50,6 +51,8 @@ enum JournalLanguage: String, CaseIterable, Codable, Identifiable {
             "English"
         case .chinese:
             "Chinese"
+        case .other:
+            "Other Language"
         }
     }
 
@@ -59,6 +62,8 @@ enum JournalLanguage: String, CaseIterable, Codable, Identifiable {
             "en-US"
         case .chinese:
             "zh-Hans"
+        case .other:
+            "en-US"
         }
     }
 }

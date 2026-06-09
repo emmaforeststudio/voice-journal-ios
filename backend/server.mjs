@@ -18,7 +18,7 @@ const server = createServer(async (request, response) => {
       });
     }
 
-    if (request.method !== "POST" || request.url !== "/journal") {
+    if (request.method !== "POST" || !["/journal", "/preview"].includes(request.url)) {
       return sendJSON(response, 404, { error: "Not found" });
     }
 
@@ -36,6 +36,9 @@ const server = createServer(async (request, response) => {
     }
 
     const transcript = await transcribe(audio);
+    if (request.url === "/preview") {
+      return sendJSON(response, 200, { transcript });
+    }
     const journal = await polishJournal(transcript);
 
     return sendJSON(response, 200, { transcript, ...journal });
@@ -91,8 +94,8 @@ async function polishJournal(transcript) {
             "Do not invent events, advice, interpretations, or details.",
             "Create a thoughtful, specific title of at most six words.",
             `Choose exactly one emoji from this set that best reflects the emotional tone: ${supportedMoodEmojis.join(" ")}`,
-            "Detect whether the journal is primarily English or Chinese.",
-            "Return the title and journal body in the same primary language as the speaker.",
+            "Classify the primary language as English, Chinese, or other.",
+            "The title and journal body must both be written in the same primary language as the speaker.",
           ].join(" "),
         },
         { role: "user", content: transcript },
@@ -108,7 +111,7 @@ async function polishJournal(transcript) {
               title: { type: "string" },
               body: { type: "string" },
               emoji: { type: "string", enum: supportedMoodEmojis },
-              language: { type: "string", enum: ["english", "chinese"] },
+              language: { type: "string", enum: ["english", "chinese", "other"] },
             },
             required: ["title", "body", "emoji", "language"],
             additionalProperties: false,

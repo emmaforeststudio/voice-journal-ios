@@ -79,4 +79,12 @@ final class JournalProcessorTests: XCTestCase {
 
         XCTAssertEqual(emoji, "😔")
     }
+
+    func testOtherLanguageFallbackPreservesOriginalText() {
+        let processor = JournalProcessor()
+        let french = "Aujourd'hui, je suis heureuse."
+
+        XCTAssertEqual(processor.clean(french, language: .other), french)
+        XCTAssertEqual(processor.makeTitle(from: french, language: .other), "Aujourd'hui, je suis heureuse")
+    }
 }

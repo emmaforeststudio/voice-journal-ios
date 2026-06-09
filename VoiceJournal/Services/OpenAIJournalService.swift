@@ -40,6 +40,29 @@ struct OpenAIJournalService {
         )
     }
 
+    func previewTranscript(from audioURL: URL) async throws -> String {
+        let audioData = try Data(contentsOf: audioURL)
+        guard audioData.count > 1_024 else { return "" }
+
+        let requestBody = JournalRequest(audioBase64: audioData.base64EncodedString())
+        var request = URLRequest(url: try backendURL().appendingPathComponent("preview"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIJournalServiceError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let error = try? JSONDecoder().decode(BackendError.self, from: data)
+            throw OpenAIJournalServiceError.backend(error?.error ?? "Live transcription was unavailable.")
+        }
+
+        return try JSONDecoder().decode(PreviewResponse.self, from: data).transcript
+    }
+
     private func backendURL() throws -> URL {
         guard
             let value = Bundle.main.object(forInfoDictionaryKey: "VoiceJournalBackendURL") as? String,
@@ -61,6 +84,10 @@ private struct JournalResponse: Decodable {
     let body: String
     let emoji: String
     let language: String
+}
+
+private struct PreviewResponse: Decodable {
+    let transcript: String
 }
 
 private struct BackendError: Decodable {
