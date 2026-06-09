@@ -43,12 +43,12 @@ struct RecordJournalView: View {
 
                 if viewModel.isRecording {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Live Preview")
+                        Text(livePreviewTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
 
                         ScrollView {
-                            Text(viewModel.liveTranscript.isEmpty ? "Listening..." : viewModel.liveTranscript)
+                            Text(viewModel.liveTranscript.isEmpty ? "Detecting language..." : viewModel.liveTranscript)
                                 .font(.body)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(viewModel.liveTranscript.isEmpty ? .secondary : .primary)
@@ -107,5 +107,12 @@ struct RecordJournalView: View {
         } else {
             "Preparing microphone..."
         }
+    }
+
+    private var livePreviewTitle: String {
+        guard let language = viewModel.liveTranscriptLanguage else {
+            return "Live Preview"
+        }
+        return "Live Preview · \(language.displayName)"
     }
 }
