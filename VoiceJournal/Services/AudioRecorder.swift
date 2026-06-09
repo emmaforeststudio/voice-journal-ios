@@ -5,10 +5,12 @@ import Foundation
 @MainActor
 final class AudioRecorder: NSObject, ObservableObject {
     @Published private(set) var isRecording = false
+    @Published private(set) var inputLevel: Float = 0
+    @Published private(set) var hasDetectedAudio = false
 
-    private let audioEngine = AVAudioEngine()
-    private var audioFile: AVAudioFile?
+    private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
+    private var meterTask: Task<Void, Never>?
 
     var currentRecordingURL: URL? {
         recordingURL
@@ -21,41 +23,54 @@ final class AudioRecorder: NSObject, ObservableObject {
         guard granted else { throw RecordingError.microphoneDenied }
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
+        try session.setCategory(.record, mode: .measurement)
         try session.setActive(true)
     }
 
     func start() async throws {
         try await prepare()
 
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.channelCount > 0 else { throw RecordingError.notReady }
-
         let url = Self.temporaryRecordingURL()
-        let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
-
-        inputNode.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
-            try? audioFile.write(from: buffer)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let audioRecorder = try AVAudioRecorder(url: url, settings: settings)
+        audioRecorder.isMeteringEnabled = true
+        guard audioRecorder.prepareToRecord(), audioRecorder.record() else {
+            throw RecordingError.couldNotStart
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
+        inputLevel = 0
+        hasDetectedAudio = false
 
-        self.audioFile = audioFile
+        self.audioRecorder = audioRecorder
         self.recordingURL = url
         isRecording = true
+        startMetering()
     }
 
     func stop() throws -> URL {
-        guard let recordingURL else { throw RecordingError.notRecording }
+        guard let recordingURL, let audioRecorder else { throw RecordingError.notRecording }
 
-        audioEngine.inputNode.removeTap(onBus: 0)
-        audioEngine.stop()
-        audioFile = nil
+        meterTask?.cancel()
+        meterTask = nil
+        let recordedDuration = audioRecorder.currentTime
+        audioRecorder.stop()
+        self.audioRecorder = nil
         self.recordingURL = nil
         isRecording = false
+        inputLevel = 0
         try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        guard recordedDuration > 0, hasDetectedAudio else {
+            deleteRecording(at: recordingURL)
+            throw RecordingError.noAudibleAudio
+        }
         return recordingURL
     }
 
@@ -83,6 +98,22 @@ final class AudioRecorder: NSObject, ObservableObject {
             .appendingPathExtension("wav")
     }
 
+    private func startMetering() {
+        meterTask?.cancel()
+        meterTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let audioRecorder = self.audioRecorder else { return }
+                audioRecorder.updateMeters()
+                let decibels = audioRecorder.averagePower(forChannel: 0)
+                let level = pow(10, decibels / 20)
+                self.inputLevel = level
+                if level > 0.002 {
+                    self.hasDetectedAudio = true
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+    }
 }
 
 enum RecordingError: LocalizedError {
@@ -90,6 +121,7 @@ enum RecordingError: LocalizedError {
     case notReady
     case couldNotStart
     case notRecording
+    case noAudibleAudio
 
     var errorDescription: String? {
         switch self {
@@ -101,6 +133,8 @@ enum RecordingError: LocalizedError {
             "The recording could not start."
         case .notRecording:
             "There is no active recording to stop."
+        case .noAudibleAudio:
+            "The microphone captured silence. Check that Voice Journal has microphone access, disconnect any unused Bluetooth microphone, and try again."
         }
     }
 }

@@ -18,10 +18,26 @@ final class RecorderViewModel: ObservableObject {
     private let processor = JournalProcessor()
     private var recordingTimer: AnyCancellable?
     private var previewTimer: AnyCancellable?
+    private var recorderObservation: AnyCancellable?
     private var isLoadingPreview = false
+
+    init() {
+        recorderObservation = recorder.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+    }
 
     var isRecording: Bool {
         recorder.isRecording
+    }
+
+    var microphoneLevel: Float {
+        recorder.inputLevel
+    }
+
+    var hasDetectedAudio: Bool {
+        recorder.hasDetectedAudio
     }
 
     func prepareForRecording() {
@@ -85,14 +101,16 @@ final class RecorderViewModel: ObservableObject {
                 }
             } catch {
                 errorMessage = error.localizedDescription
-                draft = JournalDraft(
-                    title: "Untitled Journal",
-                    body: "",
-                    journalDate: .now,
-                    emoji: "🙂",
-                    language: .english,
-                    notice: "The recording finished, but speech transcription was unavailable: \(error.localizedDescription) You can type your journal below and save it."
-                )
+                if error as? RecordingError != .noAudibleAudio {
+                    draft = JournalDraft(
+                        title: "Untitled Journal",
+                        body: "",
+                        journalDate: .now,
+                        emoji: "🙂",
+                        language: .english,
+                        notice: "The recording finished, but speech transcription was unavailable: \(error.localizedDescription) You can type your journal below and save it."
+                    )
+                }
             }
             isProcessing = false
             liveTranscript = ""

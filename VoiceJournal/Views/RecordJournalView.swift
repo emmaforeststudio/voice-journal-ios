@@ -35,9 +35,16 @@ struct RecordJournalView: View {
                         .multilineTextAlignment(.center)
 
                     if viewModel.isRecording {
-                        Text(viewModel.formattedRecordingDuration)
-                            .font(.system(.title2, design: .monospaced, weight: .semibold))
-                            .foregroundStyle(.red)
+                        VStack(spacing: 10) {
+                            Text(viewModel.formattedRecordingDuration)
+                                .font(.system(.title2, design: .monospaced, weight: .semibold))
+                                .foregroundStyle(.red)
+
+                            MicrophoneLevelView(
+                                level: viewModel.microphoneLevel,
+                                hasDetectedAudio: viewModel.hasDetectedAudio
+                            )
+                        }
                     }
                 }
 
@@ -115,4 +122,32 @@ struct RecordJournalView: View {
             : viewModel.liveTranscript
     }
 
+}
+
+private struct MicrophoneLevelView: View {
+    let level: Float
+    let hasDetectedAudio: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.16))
+                    Capsule()
+                        .fill(hasDetectedAudio ? Color.green : Color.orange)
+                        .frame(width: geometry.size.width * displayedLevel)
+                }
+            }
+            .frame(width: 150, height: 8)
+
+            Text(hasDetectedAudio ? "Microphone is hearing you" : "Speak to check the microphone")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var displayedLevel: CGFloat {
+        min(max(CGFloat(level) * 20, 0.03), 1)
+    }
 }

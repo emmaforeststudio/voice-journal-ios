@@ -45,7 +45,7 @@ const server = createServer(async (request, response) => {
       return sendJSON(response, 400, { error: "Audio is required" });
     }
 
-    const transcript = await transcribe(audio);
+    const transcript = await transcribe(audio, request.url === "/preview");
     if (request.url === "/preview") {
       return sendJSON(response, 200, { transcript });
     }
@@ -65,7 +65,7 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`OpenAI API key configured: ${Boolean(apiKey)}`);
 });
 
-async function transcribe(audio) {
+async function transcribe(audio, allowEmpty = false) {
   const form = new FormData();
   form.append("model", "gpt-4o-mini-transcribe");
   form.append("response_format", "json");
@@ -81,6 +81,7 @@ async function transcribe(audio) {
   });
 
   if (!result.text?.trim()) {
+    if (allowEmpty) return "";
     throw new Error("OpenAI did not detect speech in the recording.");
   }
 
