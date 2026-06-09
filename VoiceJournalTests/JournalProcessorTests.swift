@@ -18,6 +18,20 @@ final class JournalProcessorTests: XCTestCase {
         XCTAssertEqual(result, "今天有点累，但是我还是完成了工作。")
     }
 
+    func testCleanupPreservesMeaningfulParagraphBreaks() {
+        let processor = JournalProcessor()
+
+        let result = processor.clean(
+            "Today was difficult.   I felt frustrated.\n\n\nLater, a walk helped me feel better.",
+            language: .english
+        )
+
+        XCTAssertEqual(
+            result,
+            "Today was difficult. I felt frustrated.\n\nLater, a walk helped me feel better."
+        )
+    }
+
     func testTitleTurnsVoiceJournalTestIntoShortTitle() {
         let processor = JournalProcessor()
 
