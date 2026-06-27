@@ -20,19 +20,19 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Voice Journal uses the microphone to record your journal entries.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Voice Journal uses on-device speech recognition to transcribe your private journal entries.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Voice Journal connects to your Mac during development to securely process journal recordings.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>VoiceJournalBackendURL</key>
-	<string>http://Emmas-MacBook-Pro.local:8787</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Voice Journal uses Face ID to lock and protect your private journal entries.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Voice Journal connects to your Mac during development to securely process journal recordings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voice Journal uses the microphone to record your journal entries.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Voice Journal uses on-device speech recognition to transcribe your private journal entries.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -40,5 +40,7 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>VoiceJournalBackendURL</key>
+	<string>http://Emmas-MacBook-Pro.local:8787</string>
 </dict>
 </plist>

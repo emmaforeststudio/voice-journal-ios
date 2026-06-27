@@ -9,7 +9,7 @@ struct MainTabView: View {
                 selectedTab = 1
             }
                 .tabItem {
-                    Label("Record", systemImage: "mic.circle.fill")
+                    Label("Create", systemImage: "plus.circle.fill")
                 }
                 .tag(0)
 
@@ -19,9 +19,9 @@ struct MainTabView: View {
                 }
                 .tag(1)
 
-            SearchJournalView()
+            InsightsJournalView()
                 .tabItem {
-                    Label("Search", systemImage: "magnifyingglass")
+                    Label("Insights", systemImage: "chart.bar.fill")
                 }
                 .tag(2)
         }

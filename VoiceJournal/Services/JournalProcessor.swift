@@ -250,7 +250,7 @@ struct JournalProcessor {
             options: [.regularExpression, .caseInsensitive]
         )
         text = text.replacingOccurrences(of: "\\s+([,.!?])", with: "$1", options: .regularExpression)
-        text = text.replacingOccurrences(of: "([.!?])\\s*([A-Za-z])", with: "$1 $2", options: .regularExpression)
+        text = text.replacingOccurrences(of: "([.!?])[ \\t]*([A-Za-z])", with: "$1 $2", options: .regularExpression)
 
         return capitalizeSentences(text)
     }

@@ -3,17 +3,26 @@ import SwiftUI
 
 @main
 struct VoiceJournalApp: App {
+    @AppStorage("appThemePreference") private var appThemePreference = AppThemePreference.system.rawValue
+
     var body: some Scene {
         WindowGroup {
+            Group {
 #if DEBUG
-            if CommandLine.arguments.contains("--audio-self-test") {
-                AudioSelfTestView()
-            } else {
-                MainTabView()
-            }
+                if CommandLine.arguments.contains("--audio-self-test") {
+                    AudioSelfTestView()
+                } else {
+                    LockableRootView {
+                        MainTabView()
+                    }
+                }
 #else
-            MainTabView()
+                LockableRootView {
+                    MainTabView()
+                }
 #endif
+            }
+            .preferredColorScheme(AppThemePreference.value(for: appThemePreference).colorScheme)
         }
         .modelContainer(for: JournalEntry.self)
     }

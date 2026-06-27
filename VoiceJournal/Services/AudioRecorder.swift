@@ -67,7 +67,7 @@ final class AudioRecorder: NSObject, ObservableObject {
         inputLevel = 0
         try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
-        guard recordedDuration > 0, hasDetectedAudio else {
+        guard recordedDuration > 0.35 else {
             deleteRecording(at: recordingURL)
             throw RecordingError.noAudibleAudio
         }

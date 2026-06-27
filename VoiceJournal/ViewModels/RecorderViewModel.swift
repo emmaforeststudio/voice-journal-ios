@@ -20,6 +20,7 @@ final class RecorderViewModel: ObservableObject {
     private var previewTimer: AnyCancellable?
     private var recorderObservation: AnyCancellable?
     private var isLoadingPreview = false
+    private var isLivePreviewEnabled = true
 
     init() {
         recorderObservation = recorder.objectWillChange
@@ -71,8 +72,10 @@ final class RecorderViewModel: ObservableObject {
                 try await recorder.start()
                 isReadyToRecord = true
                 startRecordingTimer()
-                startPreviewTimer()
-                scheduleInitialPreview()
+                if isLivePreviewEnabled {
+                    startPreviewTimer()
+                    scheduleInitialPreview()
+                }
                 objectWillChange.send()
             } catch {
                 errorMessage = error.localizedDescription
@@ -98,14 +101,20 @@ final class RecorderViewModel: ObservableObject {
                         livePreviewTranscript: latestLiveTranscript
                     )
                 } catch {
-                    let fallback = try await transcriber.transcribeAudioAutomatically(at: url)
-                    var fallbackDraft = processor.makeDraft(from: fallback.text, language: fallback.language)
-                    fallbackDraft.notice = "OpenAI enhancement was unavailable, so this journal was transcribed and processed on your iPhone. \(error.localizedDescription)"
-                    draft = fallbackDraft
+                    if let previewDraft = makeDraftFromLivePreview(latestLiveTranscript, notice: "This journal was created from the live preview transcript.") {
+                        draft = previewDraft
+                    } else {
+                        let fallback = try await transcriber.transcribeAudioAutomatically(at: url)
+                        var fallbackDraft = processor.makeDraft(from: fallback.text, language: fallback.language)
+                        fallbackDraft.notice = "OpenAI enhancement was unavailable, so this journal was transcribed and processed on your iPhone. \(error.localizedDescription)"
+                        draft = fallbackDraft
+                    }
                 }
             } catch {
                 errorMessage = error.localizedDescription
-                if error as? RecordingError != .noAudibleAudio {
+                if let previewDraft = makeDraftFromLivePreview(latestLiveTranscript, notice: "This journal was created from the live preview transcript.") {
+                    draft = previewDraft
+                } else if error as? RecordingError != .noAudibleAudio {
                     draft = JournalDraft(
                         title: "Untitled Journal",
                         body: "",
@@ -124,6 +133,25 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
+    func cancelRecording() {
+        errorMessage = nil
+        isProcessing = false
+        stopRecordingTimer()
+        stopPreviewTimer()
+        if isRecording {
+            do {
+                let url = try recorder.stop()
+                recorder.deleteRecording(at: url)
+            } catch {
+                errorMessage = nil
+            }
+        }
+        liveTranscript = ""
+        livePreviewNotice = nil
+        prepareForRecording()
+        objectWillChange.send()
+    }
+
     func createManualDraft() {
         draft = JournalDraft(
             title: "Untitled Journal",
@@ -133,6 +161,19 @@ final class RecorderViewModel: ObservableObject {
             language: .english,
             notice: nil
         )
+    }
+
+    func updateLivePreviewEnabled(_ isEnabled: Bool) {
+        isLivePreviewEnabled = isEnabled
+        if isRecording {
+            if isEnabled {
+                startPreviewTimer()
+                scheduleInitialPreview()
+            } else {
+                stopPreviewTimer()
+                livePreviewNotice = nil
+            }
+        }
     }
 
     var formattedRecordingDuration: String {
@@ -176,8 +217,31 @@ final class RecorderViewModel: ObservableObject {
         isLoadingPreview = false
     }
 
+    private func makeDraftFromLivePreview(_ livePreviewTranscript: String, notice: String) -> JournalDraft? {
+        let text = livePreviewTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        let language = detectedLanguage(from: text)
+        var previewDraft = processor.makeDraft(from: text, language: language)
+        previewDraft.notice = notice
+        return previewDraft
+    }
+
+    private func detectedLanguage(from text: String) -> JournalLanguage {
+        let scalars = text.unicodeScalars
+        if scalars.contains(where: { (0x4E00...0x9FFF).contains($0.value) }) {
+            return .chinese
+        }
+        if scalars.contains(where: { (0x3040...0x30FF).contains($0.value) }) {
+            return .japanese
+        }
+        if scalars.contains(where: { (0xAC00...0xD7AF).contains($0.value) }) {
+            return .korean
+        }
+        return .english
+    }
+
     private func refreshLivePreview() {
-        guard !isLoadingPreview, isRecording, let url = recorder.currentRecordingURL else { return }
+        guard isLivePreviewEnabled, !isLoadingPreview, isRecording, let url = recorder.currentRecordingURL else { return }
         isLoadingPreview = true
 
         Task {
