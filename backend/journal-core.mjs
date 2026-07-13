@@ -157,7 +157,13 @@ async function transcribe(audio, { apiKey, fetchImpl, allowEmpty = false }) {
   form.append("response_format", "json");
   form.append(
     "prompt",
-    "This is a personal journal entry. Preserve the speaker's meaning and wording accurately."
+    [
+      "This is a personal journal entry.",
+      "The speaker may code-switch or mix languages within the same sentence.",
+      "Transcribe exactly what is spoken, preserving each language in its original script when clear.",
+      "Do not translate mixed-language speech into one language.",
+      "Preserve proper nouns, app names, and informal wording accurately.",
+    ].join(" ")
   );
   form.append("file", new Blob([audio], { type: "audio/wav" }), "journal.wav");
 
@@ -301,8 +307,10 @@ async function polishJournal(transcript, livePreviewTranscript = "", { apiKey, f
             "Do not put emoji in the title or journal body; use only the dedicated emoji field.",
             `Choose exactly one emoji from this set that best reflects the emotional tone: ${supportedMoodEmojis.join(" ")}`,
             "Classify the primary language using exactly one of these labels: english, chinese, korean, japanese, german, french, spanish, other.",
-            "The title and journal body must both be written in the same primary language as the speaker.",
-            "If the primary language is not English, write the title in that language's natural script; do not translate the title into English.",
+            "Use the language field for the dominant language only.",
+            "The journal body must preserve intentional code-switching and mixed-language wording from the transcript.",
+            "Do not translate phrases into the dominant language when the speaker originally used another language.",
+            "Write the title in the dominant language's natural script.",
             "Only use an English title when the primary language is english.",
           ].join(" "),
         },

@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import PDFKit
 import UIKit
 import UserNotifications
 import UniformTypeIdentifiers
@@ -671,7 +672,7 @@ private struct VoiceJournalSettingsView: View {
                     }
                 }
 
-                let text = try String(contentsOf: url, encoding: .utf8)
+                let text = try JournalImportTextReader.text(from: url)
                 let importedEntries = MarkdownJournalImporter.importEntries(from: text, fallbackTitle: url.deletingPathExtension().lastPathComponent)
                 for entry in importedEntries {
                     modelContext.insert(entry)
@@ -2478,8 +2479,8 @@ private struct FutureLetterComposerView: View {
             Text("Saved Letters")
                 .font(selectedFontDesignPreference.font(.headline))
 
-            if letters.isEmpty {
-                Text("Saved future letters will appear here.")
+            if savedDraftLetters.isEmpty {
+                Text("Saved unscheduled letters will appear here.")
                     .font(selectedFontDesignPreference.font(.callout))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -2487,7 +2488,7 @@ private struct FutureLetterComposerView: View {
                     .background(AppThemeCardBackground())
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             } else {
-                ForEach(letters) { letter in
+                ForEach(savedDraftLetters) { letter in
                     SwipeToDeleteFutureLetterRow(
                         letter: letter,
                         title: letterTitle(letter),
@@ -2502,6 +2503,10 @@ private struct FutureLetterComposerView: View {
                 deactivateTextEditing()
             }
         )
+    }
+
+    private var savedDraftLetters: [FutureLetter] {
+        letters.filter { $0.notificationIdentifier == nil }
     }
 
     private var canSave: Bool {
@@ -3706,5 +3711,60 @@ enum MarkdownJournalImporter {
         return JournalLanguage.allCases.first {
             $0.rawValue.lowercased() == normalized || $0.displayName.lowercased() == normalized
         } ?? .other
+    }
+}
+
+enum JournalImportTextReader {
+    enum ImportError: LocalizedError {
+        case emptyPDF
+        case unsupportedWordDocument
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyPDF:
+                "This PDF does not contain selectable text. Scanned image PDFs need OCR before import."
+            case .unsupportedWordDocument:
+                "Word files are not imported directly yet. Export the document as PDF, plain text, Markdown, or RTF first."
+            }
+        }
+    }
+
+    static func text(from url: URL) throws -> String {
+        let fileExtension = url.pathExtension.lowercased()
+
+        switch fileExtension {
+        case "pdf":
+            return try pdfText(from: url)
+        case "rtf", "rtfd":
+            return try attributedText(from: url, documentType: .rtf)
+        case "html", "htm":
+            return try attributedText(from: url, documentType: .html)
+        case "doc", "docx":
+            throw ImportError.unsupportedWordDocument
+        default:
+            return try String(contentsOf: url, encoding: .utf8)
+        }
+    }
+
+    private static func pdfText(from url: URL) throws -> String {
+        guard let document = PDFDocument(url: url) else {
+            throw ImportError.emptyPDF
+        }
+
+        let text = document.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else {
+            throw ImportError.emptyPDF
+        }
+
+        return text
+    }
+
+    private static func attributedText(from url: URL, documentType: NSAttributedString.DocumentType) throws -> String {
+        let attributed = try NSAttributedString(
+            url: url,
+            options: [.documentType: documentType],
+            documentAttributes: nil
+        )
+        return attributed.string
     }
 }
