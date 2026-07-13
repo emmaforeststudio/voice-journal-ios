@@ -2249,7 +2249,9 @@ private struct FutureLetterComposerView: View {
     @State private var isRecording = false
     @State private var isProcessingRecording = false
     @State private var compositionMode = FutureLetterCompositionMode.record
+    @State private var allowsLetterEditing = true
     @State private var message: String?
+    @FocusState private var focusedField: FutureLetterFocusedField?
 
     var body: some View {
         ScrollView {
@@ -2261,6 +2263,7 @@ private struct FutureLetterComposerView: View {
             }
             .padding()
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(AppThemeBackground())
         .navigationTitle("Future Letter")
         .navigationBarTitleDisplayMode(.inline)
@@ -2277,6 +2280,7 @@ private struct FutureLetterComposerView: View {
             TextField("Title", text: $title)
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
                 .textInputAutocapitalization(.sentences)
+                .focused($focusedField, equals: .title)
                 .padding(14)
                 .background(AppThemeCardBackground())
                 .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -2298,7 +2302,7 @@ private struct FutureLetterComposerView: View {
         Button {
             handleCompositionModeTap(mode)
         } label: {
-            Label(mode.displayName, systemImage: mode.systemImage)
+            Label(compositionModeTitle(for: mode), systemImage: compositionModeSystemImage(for: mode))
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
@@ -2314,6 +2318,14 @@ private struct FutureLetterComposerView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .disabled(isProcessingRecording)
+    }
+
+    private func compositionModeTitle(for mode: FutureLetterCompositionMode) -> String {
+        mode == .record && isRecording ? "Stop" : mode.displayName
+    }
+
+    private func compositionModeSystemImage(for mode: FutureLetterCompositionMode) -> String {
+        mode == .record && isRecording ? "stop.fill" : mode.systemImage
     }
 
     private var recordingStatusSection: some View {
@@ -2352,6 +2364,8 @@ private struct FutureLetterComposerView: View {
     private func letterBodyEditor(placeholder: String) -> some View {
         TextEditor(text: $bodyText)
             .font(selectedFontDesignPreference.font(.body))
+            .focused($focusedField, equals: .body)
+            .disabled(!allowsLetterEditing)
             .frame(minHeight: 220)
             .scrollContentBackground(.hidden)
             .padding(10)
@@ -2378,6 +2392,9 @@ private struct FutureLetterComposerView: View {
                 displayedComponents: [.date, .hourAndMinute]
             )
             .font(selectedFontDesignPreference.font(.body))
+            .onChange(of: deliveryDate) { _, _ in
+                deactivateTextEditing()
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Delivery Method")
@@ -2391,10 +2408,16 @@ private struct FutureLetterComposerView: View {
         .padding(16)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 22))
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                deactivateTextEditing()
+            }
+        )
     }
 
     private func deliveryMethodButton(_ method: FutureLetterDeliveryMethod, subtitle: String, isEnabled: Bool) -> some View {
         Button {
+            deactivateTextEditing()
             if isEnabled {
                 deliveryMethod = method
                 message = nil
@@ -2474,9 +2497,10 @@ private struct FutureLetterComposerView: View {
     }
 
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        deliveryMethod == .inAppNotification
+        deliveryMethod == .inAppNotification &&
+        !isRecording &&
+        !isProcessingRecording
     }
 
     private func handleCompositionModeTap(_ mode: FutureLetterCompositionMode) {
@@ -2485,13 +2509,23 @@ private struct FutureLetterComposerView: View {
         switch mode {
         case .record:
             compositionMode = .record
+            allowsLetterEditing = true
+            focusedField = nil
             toggleRecording()
         case .type:
             compositionMode = .type
+            allowsLetterEditing = true
             if isRecording {
                 stopRecording()
+            } else {
+                focusedField = .body
             }
         }
+    }
+
+    private func deactivateTextEditing() {
+        focusedField = nil
+        allowsLetterEditing = false
     }
 
     private func toggleRecording() {
@@ -2504,6 +2538,8 @@ private struct FutureLetterComposerView: View {
 
     private func startRecording() {
         message = nil
+        focusedField = nil
+        allowsLetterEditing = true
         Task {
             do {
                 try await recorder.start()
@@ -2540,6 +2576,7 @@ private struct FutureLetterComposerView: View {
     }
 
     private func saveLetter() {
+        focusedField = nil
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         let letter = FutureLetter(
@@ -2551,14 +2588,21 @@ private struct FutureLetterComposerView: View {
 
         Task {
             do {
-                let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
-                letter.notificationIdentifier = notificationID
+                var notificationMessage = "Letter saved."
+                do {
+                    let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                    letter.notificationIdentifier = notificationID
+                } catch {
+                    notificationMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                }
+
                 modelContext.insert(letter)
                 try modelContext.save()
                 title = ""
                 bodyText = ""
                 deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
-                message = "Letter saved."
+                allowsLetterEditing = true
+                message = notificationMessage
             } catch {
                 message = error.localizedDescription
             }
@@ -2691,6 +2735,11 @@ private enum FutureLetterCompositionMode: CaseIterable {
             "square.and.pencil"
         }
     }
+}
+
+private enum FutureLetterFocusedField: Hashable {
+    case title
+    case body
 }
 
 private struct ThemeCloudView: View {
