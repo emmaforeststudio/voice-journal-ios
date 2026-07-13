@@ -149,6 +149,7 @@ struct InsightsJournalView: View {
             InsightMetricCard(title: "Current Streak", value: "\(currentStreak) days", imageName: "metric-streak-flame")
             InsightMetricCard(title: "This Month", value: entryCountText(entriesThisMonth), imageName: "metric-calendar")
         }
+        .frame(minHeight: 96)
     }
 
     private var memoryCardSection: some View {
@@ -408,7 +409,7 @@ private struct VoiceJournalSettingsView: View {
     @State private var requestedPasswordLock = false
     @State private var isShowingDeleteAccountConfirmation = false
     @State private var isShowingDeleteJournalsConfirmation = false
-    @State private var isShowingExportSheet = false
+    @State private var exportDocument: ExportDocument?
     @State private var isShowingImportPicker = false
     @State private var isShowingPasswordSetup = false
     @State private var passwordDraft = ""
@@ -488,8 +489,13 @@ private struct VoiceJournalSettingsView: View {
                         .listRowBackground(AppThemeCardBackground())
                 }
                 Button {
-                    exportURL = makeMarkdownExport()
-                    isShowingExportSheet = exportURL != nil
+                    if let url = makeMarkdownExport() {
+                        exportURL = url
+                        exportDocument = ExportDocument(url: url)
+                        importMessage = nil
+                    } else {
+                        importMessage = "Export failed. Please try again."
+                    }
                 } label: {
                     SettingsRowLabel(title: "Export Journals", imageName: "icon-export-journals", foregroundColor: settingsActionTextColor, iconColor: Color.accentColor)
                 }
@@ -586,11 +592,9 @@ private struct VoiceJournalSettingsView: View {
                 isShowingPasswordSetup = false
             }
         }
-        .sheet(isPresented: $isShowingExportSheet) {
-            if let exportURL {
-                ActivityView(activityItems: [exportURL])
-                    .presentationDetents([.medium, .large])
-            }
+        .sheet(item: $exportDocument) { document in
+            ActivityView(activityItems: [document.url])
+                .presentationDetents([.medium, .large])
         }
         .confirmationDialog("Delete all journals?", isPresented: $isShowingDeleteJournalsConfirmation, titleVisibility: .visible) {
             Button("Delete All Journals", role: .destructive) {
@@ -1836,6 +1840,11 @@ private struct ActivityView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
+private struct ExportDocument: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
 private struct ThemeSelectionSwatch: View {
     let theme: AppColorTheme
     let isSelected: Bool
@@ -2109,7 +2118,7 @@ private struct InsightMetricCard: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.72)
         }
-        .frame(maxWidth: .infinity, minHeight: 84, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 94, alignment: .center)
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
         .background(AppThemeCardBackground())
@@ -2167,7 +2176,7 @@ private struct InsightMemoryCard: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 114, alignment: .center)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .contentShape(RoundedRectangle(cornerRadius: 28))
@@ -2249,7 +2258,6 @@ private struct FutureLetterComposerView: View {
     @State private var isRecording = false
     @State private var isProcessingRecording = false
     @State private var compositionMode = FutureLetterCompositionMode.record
-    @State private var allowsLetterEditing = true
     @State private var message: String?
     @FocusState private var focusedField: FutureLetterFocusedField?
 
@@ -2264,7 +2272,12 @@ private struct FutureLetterComposerView: View {
             .padding()
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(AppThemeBackground())
+        .background {
+            AppThemeBackground()
+                .onTapGesture {
+                    deactivateTextEditing()
+                }
+        }
         .navigationTitle("Future Letter")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -2334,7 +2347,7 @@ private struct FutureLetterComposerView: View {
                 ProgressView("Transcribing your letter")
                     .font(selectedFontDesignPreference.font(.callout))
             } else if isRecording {
-                Text("Recording... tap Record again to stop.")
+                Text("Recording... tap Stop to finish.")
                     .font(selectedFontDesignPreference.font(.callout))
                     .foregroundStyle(.secondary)
             }
@@ -2365,7 +2378,6 @@ private struct FutureLetterComposerView: View {
         TextEditor(text: $bodyText)
             .font(selectedFontDesignPreference.font(.body))
             .focused($focusedField, equals: .body)
-            .disabled(!allowsLetterEditing)
             .frame(minHeight: 220)
             .scrollContentBackground(.hidden)
             .padding(10)
@@ -2494,6 +2506,11 @@ private struct FutureLetterComposerView: View {
                 }
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                deactivateTextEditing()
+            }
+        )
     }
 
     private var canSave: Bool {
@@ -2509,12 +2526,10 @@ private struct FutureLetterComposerView: View {
         switch mode {
         case .record:
             compositionMode = .record
-            allowsLetterEditing = true
             focusedField = nil
             toggleRecording()
         case .type:
             compositionMode = .type
-            allowsLetterEditing = true
             if isRecording {
                 stopRecording()
             } else {
@@ -2525,7 +2540,6 @@ private struct FutureLetterComposerView: View {
 
     private func deactivateTextEditing() {
         focusedField = nil
-        allowsLetterEditing = false
     }
 
     private func toggleRecording() {
@@ -2539,7 +2553,6 @@ private struct FutureLetterComposerView: View {
     private func startRecording() {
         message = nil
         focusedField = nil
-        allowsLetterEditing = true
         Task {
             do {
                 try await recorder.start()
@@ -2601,7 +2614,6 @@ private struct FutureLetterComposerView: View {
                 title = ""
                 bodyText = ""
                 deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
-                allowsLetterEditing = true
                 message = notificationMessage
             } catch {
                 message = error.localizedDescription
@@ -2623,25 +2635,24 @@ private struct FutureLetterDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @StateObject private var recorder = AudioRecorder()
     let letter: FutureLetter
+    @State private var title = ""
+    @State private var bodyText = ""
+    @State private var deliveryDate = Date()
+    @State private var deliveryMethod = FutureLetterDeliveryMethod.inAppNotification
+    @State private var isRecording = false
+    @State private var isProcessingRecording = false
+    @State private var compositionMode = FutureLetterCompositionMode.type
+    @State private var message: String?
+    @FocusState private var focusedField: FutureLetterFocusedField?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text(letterTitle)
-                    .font(selectedFontDesignPreference.font(.title2, weight: .bold))
-
-                Text(letter.deliveryDate.formatted(date: .long, time: .shortened))
-                    .font(selectedFontDesignPreference.font(.callout))
-                    .foregroundStyle(.secondary)
-
-                Text(letter.body)
-                    .font(selectedFontDesignPreference.font(.body))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(18)
-                    .background(AppThemeCardBackground())
-                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                composeSection
+                deliverySection
+                saveButton
 
                 Button(role: .destructive) {
                     deleteLetter()
@@ -2654,14 +2665,316 @@ private struct FutureLetterDetailView: View {
             }
             .padding()
         }
-        .background(AppThemeBackground())
+        .scrollDismissesKeyboard(.interactively)
+        .background {
+            AppThemeBackground()
+                .onTapGesture {
+                    deactivateTextEditing()
+                }
+        }
         .navigationTitle("Future Letter")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            loadLetter()
+        }
+        .task {
+            try? await recorder.prepare()
+        }
     }
 
-    private var letterTitle: String {
-        let trimmed = letter.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Untitled Letter" : trimmed
+    private var composeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("Title", text: $title)
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .textInputAutocapitalization(.sentences)
+                .focused($focusedField, equals: .title)
+                .padding(14)
+                .background(AppThemeCardBackground())
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+            letterBodyEditor(placeholder: letterBodyPlaceholder)
+            compositionModePicker
+            recordingStatusSection
+        }
+    }
+
+    private var compositionModePicker: some View {
+        HStack(spacing: 10) {
+            compositionModeButton(.record)
+            compositionModeButton(.type)
+        }
+    }
+
+    private func compositionModeButton(_ mode: FutureLetterCompositionMode) -> some View {
+        Button {
+            handleCompositionModeTap(mode)
+        } label: {
+            Label(compositionModeTitle(for: mode), systemImage: compositionModeSystemImage(for: mode))
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(compositionMode == mode || (mode == .record && isRecording) ? .white : Color.accentColor)
+        .background {
+            if compositionMode == mode || (mode == .record && isRecording) {
+                Color.accentColor
+            } else {
+                AppThemeCardBackground()
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .disabled(isProcessingRecording)
+    }
+
+    private func compositionModeTitle(for mode: FutureLetterCompositionMode) -> String {
+        mode == .record && isRecording ? "Stop" : mode.displayName
+    }
+
+    private func compositionModeSystemImage(for mode: FutureLetterCompositionMode) -> String {
+        mode == .record && isRecording ? "stop.fill" : mode.systemImage
+    }
+
+    private var recordingStatusSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if isProcessingRecording {
+                ProgressView("Transcribing your letter")
+                    .font(selectedFontDesignPreference.font(.callout))
+            } else if isRecording {
+                Text("Recording... tap Stop to finish.")
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let message {
+                Text(message)
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var letterBodyPlaceholder: String {
+        if isRecording {
+            return "Recording..."
+        }
+
+        switch compositionMode {
+        case .record:
+            return "Record again. The transcript will be added here."
+        case .type:
+            return "Edit your letter."
+        }
+    }
+
+    private func letterBodyEditor(placeholder: String) -> some View {
+        TextEditor(text: $bodyText)
+            .font(selectedFontDesignPreference.font(.body))
+            .focused($focusedField, equals: .body)
+            .frame(minHeight: 220)
+            .scrollContentBackground(.hidden)
+            .padding(10)
+            .background(AppThemeCardBackground())
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(alignment: .topLeading) {
+                if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .font(selectedFontDesignPreference.font(.body))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+
+    private var deliverySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            DatePicker(
+                "Delivery Date & Time",
+                selection: $deliveryDate,
+                in: Date()...,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .font(selectedFontDesignPreference.font(.body))
+            .onChange(of: deliveryDate) { _, _ in
+                deactivateTextEditing()
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Delivery Method")
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                deliveryMethodButton(.inAppNotification, subtitle: "Schedule a private local reminder on this iPhone.", isEnabled: true)
+                deliveryMethodButton(.email, subtitle: "Requires an email delivery service before launch.", isEnabled: false)
+            }
+        }
+        .padding(16)
+        .background(AppThemeCardBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                deactivateTextEditing()
+            }
+        )
+    }
+
+    private func deliveryMethodButton(_ method: FutureLetterDeliveryMethod, subtitle: String, isEnabled: Bool) -> some View {
+        Button {
+            deactivateTextEditing()
+            if isEnabled {
+                deliveryMethod = method
+                message = nil
+            } else {
+                message = "Email delivery needs a backend email provider before it can be enabled."
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: deliveryMethod == method ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(method.displayName)
+                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                        .foregroundStyle(isEnabled ? .primary : .secondary)
+                    Text(subtitle)
+                        .font(selectedFontDesignPreference.font(.caption))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var saveButton: some View {
+        Button {
+            saveChanges()
+        } label: {
+            Text("Save Letter")
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!canSave)
+    }
+
+    private var canSave: Bool {
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        deliveryMethod == .inAppNotification &&
+        !isRecording &&
+        !isProcessingRecording
+    }
+
+    private func loadLetter() {
+        title = letter.title
+        bodyText = letter.body
+        deliveryDate = max(letter.deliveryDate, Date())
+        deliveryMethod = letter.deliveryMethod
+    }
+
+    private func handleCompositionModeTap(_ mode: FutureLetterCompositionMode) {
+        message = nil
+
+        switch mode {
+        case .record:
+            compositionMode = .record
+            focusedField = nil
+            toggleRecording()
+        case .type:
+            compositionMode = .type
+            if isRecording {
+                stopRecording()
+            } else {
+                focusedField = .body
+            }
+        }
+    }
+
+    private func deactivateTextEditing() {
+        focusedField = nil
+    }
+
+    private func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    private func startRecording() {
+        message = nil
+        focusedField = nil
+        Task {
+            do {
+                try await recorder.start()
+                isRecording = true
+            } catch {
+                message = error.localizedDescription
+            }
+        }
+    }
+
+    private func stopRecording() {
+        isProcessingRecording = true
+        isRecording = false
+        Task {
+            do {
+                let url = try recorder.stop()
+                defer { recorder.deleteRecording(at: url) }
+                let transcript = try await OpenAIJournalService().previewTranscript(from: url)
+                appendTranscript(transcript)
+                message = "Recording added to your letter."
+            } catch {
+                message = error.localizedDescription
+            }
+            isProcessingRecording = false
+            try? await recorder.prepare()
+        }
+    }
+
+    private func appendTranscript(_ transcript: String) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else { return }
+        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        bodyText = trimmedBody.isEmpty ? trimmedTranscript : "\(trimmedBody)\n\n\(trimmedTranscript)"
+    }
+
+    private func saveChanges() {
+        focusedField = nil
+        if let notificationIdentifier = letter.notificationIdentifier {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
+            letter.notificationIdentifier = nil
+        }
+
+        letter.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        letter.body = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        letter.deliveryDate = deliveryDate
+        letter.deliveryMethod = deliveryMethod
+        letter.updatedAt = Date()
+
+        Task {
+            do {
+                var notificationMessage = "Letter saved."
+                do {
+                    let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                    letter.notificationIdentifier = notificationID
+                } catch {
+                    notificationMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                }
+
+                try modelContext.save()
+                message = notificationMessage
+            } catch {
+                message = error.localizedDescription
+            }
+        }
     }
 
     private func deleteLetter() {
