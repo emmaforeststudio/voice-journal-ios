@@ -27,6 +27,12 @@ final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         print("NOTIFICATION_DIAGNOSTIC opened id=\(response.notification.request.identifier)")
+#if DEBUG
+        UserDefaults.standard.set(
+            response.notification.request.identifier,
+            forKey: "notificationDiagnosticLastOpenedIdentifier"
+        )
+#endif
         completionHandler()
     }
 }
@@ -40,18 +46,24 @@ struct VoiceJournalApp: App {
         WindowGroup {
             Group {
 #if DEBUG
-                if CommandLine.arguments.contains("--notification-self-test") {
+                if CommandLine.arguments.contains("--notification-inspect") {
+                    NotificationInspectionView()
+                } else if CommandLine.arguments.contains("--notification-self-test") {
                     NotificationSelfTestView()
                 } else if CommandLine.arguments.contains("--audio-self-test") {
                     AudioSelfTestView()
                 } else {
-                    LockableRootView {
-                        MainTabView()
+                    FutureLetterNotificationSyncView {
+                        LockableRootView {
+                            MainTabView()
+                        }
                     }
                 }
 #else
-                LockableRootView {
-                    MainTabView()
+                FutureLetterNotificationSyncView {
+                    LockableRootView {
+                        MainTabView()
+                    }
                 }
 #endif
             }
@@ -63,7 +75,64 @@ struct VoiceJournalApp: App {
     }
 }
 
+private struct FutureLetterNotificationSyncView<Content: View>: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Query private var letters: [FutureLetter]
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                if await FutureLetterNotificationScheduler.synchronize(letters: letters) {
+                    try? modelContext.save()
+                }
+            }
+    }
+}
+
 #if DEBUG
+private struct NotificationInspectionView: View {
+    @Query(sort: \FutureLetter.deliveryDate, order: .forward) private var letters: [FutureLetter]
+    @State private var status = "Inspecting delivered notifications..."
+
+    var body: some View {
+        Text(status)
+            .multilineTextAlignment(.center)
+            .padding(28)
+            .task {
+                let center = UNUserNotificationCenter.current()
+                let pending = await center.pendingNotificationRequests()
+                let delivered = await center.deliveredNotifications()
+                let formatter = ISO8601DateFormatter()
+                let pendingIDs = pending.map { request in
+                    let nextDate: Date?
+                    if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger {
+                        nextDate = trigger.nextTriggerDate()
+                    } else if let trigger = request.trigger as? UNCalendarNotificationTrigger {
+                        nextDate = trigger.nextTriggerDate()
+                    } else {
+                        nextDate = nil
+                    }
+                    let date = nextDate.map(formatter.string(from:)) ?? "none"
+                    return "\(request.identifier)@\(date)"
+                }.joined(separator: ",")
+                let deliveredIDs = delivered.map(\.request.identifier).joined(separator: ",")
+                let lastOpenedID = UserDefaults.standard.string(forKey: "notificationDiagnosticLastOpenedIdentifier") ?? "none"
+                let letterDates = letters.map { letter in
+                    "\(letter.id.uuidString)@\(formatter.string(from: letter.deliveryDate))#\(letter.notificationIdentifier ?? "none")"
+                }.joined(separator: ",")
+                print("NOTIFICATION_DIAGNOSTIC inspection pending=[\(pendingIDs)] delivered=[\(deliveredIDs)] lastOpened=\(lastOpenedID) letters=[\(letterDates)] now=\(formatter.string(from: Date()))")
+                status = "Pending: \(pending.count)\nDelivered: \(delivered.count)"
+            }
+    }
+}
+
 private struct NotificationSelfTestView: View {
     @State private var status = "Preparing notification self-test..."
 
@@ -87,37 +156,18 @@ private struct NotificationSelfTestView: View {
         let center = UNUserNotificationCenter.current()
 
         do {
-            var settings = await center.notificationSettings()
-            if settings.authorizationStatus == .notDetermined {
-                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-                guard granted else {
-                    status = "Permission was not granted."
-                    return
-                }
-                settings = await center.notificationSettings()
-            }
-
+            let settings = await center.notificationSettings()
             let settingsDescription = "authorization=\(settings.authorizationStatus.rawValue) alert=\(settings.alertSetting.rawValue) sound=\(settings.soundSetting.rawValue) summary=\(settings.scheduledDeliverySetting.rawValue) timeSensitive=\(settings.timeSensitiveSetting.rawValue)"
             print("NOTIFICATION_DIAGNOSTIC settings \(settingsDescription)")
 
-            guard settings.authorizationStatus == .authorized else {
-                status = "Notification authorization is not active. \(settingsDescription)"
-                return
-            }
-
-            let identifier = "notification-self-test-\(UUID().uuidString)"
-            let content = UNMutableNotificationContent()
-            content.title = "Flara Day Test"
-            content.body = "Local notifications are working."
-            content.sound = .default
-            content.interruptionLevel = .active
-
-            let request = UNNotificationRequest(
-                identifier: identifier,
-                content: content,
-                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
+            let letter = FutureLetter(
+                title: "Test received - please do not tap",
+                body: "This verifies the same notification path used by Future Letters.",
+                deliveryDate: Date().addingTimeInterval(180),
+                deliveryMethod: .inAppNotification
             )
-            try await center.add(request)
+            let identifier = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+            let waitInterval = max(8, letter.deliveryDate.timeIntervalSinceNow + 5)
 
             let pendingBeforeDelivery = await center.pendingNotificationRequests()
             guard pendingBeforeDelivery.contains(where: { $0.identifier == identifier }) else {
@@ -126,9 +176,9 @@ private struct NotificationSelfTestView: View {
                 return
             }
 
-            status = "iOS accepted the notification. It should appear in 10 seconds."
-            print("NOTIFICATION_DIAGNOSTIC accepted id=\(identifier)")
-            try await Task.sleep(for: .seconds(14))
+            status = "iOS accepted the Future Letter notification. It should appear at \(letter.deliveryDate.formatted(date: .omitted, time: .shortened))."
+            print("NOTIFICATION_DIAGNOSTIC accepted id=\(identifier) date=\(letter.deliveryDate)")
+            try await Task.sleep(for: .seconds(waitInterval))
 
             let pendingAfterDelivery = await center.pendingNotificationRequests()
             let delivered = await center.deliveredNotifications()

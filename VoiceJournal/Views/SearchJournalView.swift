@@ -2253,7 +2253,7 @@ private struct FutureLetterComposerView: View {
     @StateObject private var recorder = AudioRecorder()
     @State private var title = ""
     @State private var bodyText = ""
-    @State private var deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
+    @State private var deliveryDate = FutureLetterNotificationScheduler.defaultDeliveryDate()
     @State private var deliveryMethod = FutureLetterDeliveryMethod.inAppNotification
     @State private var selectedLetter: FutureLetter?
     @State private var isRecording = false
@@ -2647,7 +2647,7 @@ private struct FutureLetterComposerView: View {
                 try modelContext.save()
                 title = ""
                 bodyText = ""
-                deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
+                deliveryDate = FutureLetterNotificationScheduler.defaultDeliveryDate()
                 message = resultMessage
                 if shouldSchedule, letter.notificationIdentifier != nil {
                     dismiss()
@@ -2661,6 +2661,7 @@ private struct FutureLetterComposerView: View {
     private func deleteLetter(_ letter: FutureLetter) {
         if let notificationIdentifier = letter.notificationIdentifier {
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationIdentifier])
         }
         if selectedLetter?.id == letter.id {
             selectedLetter = nil
@@ -2684,23 +2685,29 @@ private struct FutureLetterDeliveryDatePicker: View {
     @Binding var date: Date
 
     var body: some View {
-        HStack(spacing: 12) {
-            Spacer(minLength: 0)
+        VStack(spacing: 6) {
+            HStack(spacing: 12) {
+                Spacer(minLength: 0)
 
-            Image(systemName: "calendar")
-                .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
+                Image(systemName: "calendar")
+                    .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
 
-            DatePicker(
-                "Delivery Date & Time",
-                selection: $date,
-                in: Date()...,
-                displayedComponents: [.date, .hourAndMinute]
-            )
-            .labelsHidden()
+                DatePicker(
+                    "Delivery Date & Time",
+                    selection: $date,
+                    in: Date()...,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .labelsHidden()
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+
+            Text(date.formatted(.dateTime.weekday(.wide).month(.wide).day().year().hour().minute()))
+                .font(selectedFontDesignPreference.font(.caption))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityElement(children: .combine)
@@ -3154,10 +3161,18 @@ private struct FutureLetterDetailView: View {
     }
 }
 
-private enum FutureLetterNotificationScheduler {
+enum FutureLetterNotificationScheduler {
+    static func defaultDeliveryDate(now: Date = .now, calendar: Calendar = .current) -> Date {
+        let oneHourLater = calendar.date(byAdding: .hour, value: 1, to: now) ?? now.addingTimeInterval(60 * 60)
+        return normalizedDeliveryDate(oneHourLater, calendar: calendar)
+    }
+
     static func schedule(letter: FutureLetter) async throws -> String {
         let center = UNUserNotificationCenter.current()
         _ = try await verifiedNotificationSettings(center)
+
+        let deliveryDate = normalizedDeliveryDate(letter.deliveryDate)
+        letter.deliveryDate = deliveryDate
 
         let content = UNMutableNotificationContent()
         content.title = "Letter to Future Me"
@@ -3167,17 +3182,99 @@ private enum FutureLetterNotificationScheduler {
         content.interruptionLevel = .active
         content.userInfo = ["futureLetterID": letter.id.uuidString]
 
-        let timeInterval = letter.deliveryDate.timeIntervalSinceNow
+        let timeInterval = deliveryDate.timeIntervalSinceNow
         guard timeInterval >= 5 else {
             throw FutureLetterError.scheduledTimeTooSoon
         }
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+        let calendar = Calendar.current
+        var components = calendar.dateComponents(
+            [.calendar, .timeZone, .year, .month, .day, .hour, .minute, .second],
+            from: deliveryDate
+        )
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let identifier = "future-letter-\(letter.id.uuidString)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         try await center.add(request)
         try await verifyPendingRequest(identifier: identifier, center: center)
         return identifier
+    }
+
+    @MainActor
+    static func synchronize(letters: [FutureLetter]) async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let delivered = await center.deliveredNotifications()
+        let pendingByID = Dictionary(uniqueKeysWithValues: pending.map { ($0.identifier, $0) })
+        let scheduledLetters = letters.filter { $0.notificationIdentifier != nil }
+        let validIDs = Set(scheduledLetters.compactMap(\.notificationIdentifier))
+        let orphanedIDs = pending.map(\.identifier).filter {
+            $0.hasPrefix("future-letter-") && !validIDs.contains($0)
+        }
+        if !orphanedIDs.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: orphanedIDs)
+        }
+
+        let orphanedDeliveredIDs = delivered.map(\.request.identifier).filter {
+            $0.hasPrefix("future-letter-") && !validIDs.contains($0)
+        }
+        if !orphanedDeliveredIDs.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: orphanedDeliveredIDs)
+        }
+
+        var didChange = !orphanedIDs.isEmpty || !orphanedDeliveredIDs.isEmpty
+        let now = Date()
+
+        for letter in scheduledLetters {
+            guard let storedID = letter.notificationIdentifier else { continue }
+
+            if letter.deliveryDate <= now {
+                if pendingByID[storedID] != nil {
+                    center.removePendingNotificationRequests(withIdentifiers: [storedID])
+                    didChange = true
+                }
+                continue
+            }
+
+            let existingRequest = pendingByID[storedID]
+            let requestDate = existingRequest.flatMap(nextTriggerDate(for:))
+            if existingRequest?.trigger is UNCalendarNotificationTrigger,
+               let requestDate,
+               abs(requestDate.timeIntervalSince(letter.deliveryDate)) < 2 {
+                continue
+            }
+
+            do {
+                let replacementID = try await schedule(letter: letter)
+                if replacementID != storedID {
+                    center.removePendingNotificationRequests(withIdentifiers: [storedID])
+                }
+                letter.notificationIdentifier = replacementID
+                didChange = true
+                print("NOTIFICATION_DIAGNOSTIC synchronized id=\(replacementID) date=\(letter.deliveryDate)")
+            } catch {
+                print("NOTIFICATION_DIAGNOSTIC synchronization failed id=\(storedID) error=\(error.localizedDescription)")
+            }
+        }
+
+        return didChange
+    }
+
+    private static func nextTriggerDate(for request: UNNotificationRequest) -> Date? {
+        if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger {
+            return trigger.nextTriggerDate()
+        }
+        if let trigger = request.trigger as? UNCalendarNotificationTrigger {
+            return trigger.nextTriggerDate()
+        }
+        return nil
+    }
+
+    private static func normalizedDeliveryDate(_ date: Date, calendar: Calendar = .current) -> Date {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return calendar.date(from: components) ?? date
     }
 
     private static func verifiedNotificationSettings(_ center: UNUserNotificationCenter) async throws -> UNNotificationSettings {
