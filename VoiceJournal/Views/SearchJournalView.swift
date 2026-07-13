@@ -2246,7 +2246,6 @@ private struct LetterToFutureMeCard: View {
 
 private struct FutureLetterComposerView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @Query(sort: \FutureLetter.deliveryDate, order: .forward) private var letters: [FutureLetter]
     @StateObject private var recorder = AudioRecorder()
@@ -2266,7 +2265,7 @@ private struct FutureLetterComposerView: View {
             VStack(alignment: .leading, spacing: 18) {
                 composeSection
                 deliverySection
-                saveButton
+                actionButtons
                 savedLettersSection
             }
             .padding()
@@ -2300,7 +2299,7 @@ private struct FutureLetterComposerView: View {
 
             letterBodyEditor(placeholder: letterBodyPlaceholder)
             compositionModePicker
-            recordingStatusSection
+            statusSection
         }
     }
 
@@ -2341,15 +2340,11 @@ private struct FutureLetterComposerView: View {
         mode == .record && isRecording ? "stop.fill" : mode.systemImage
     }
 
-    private var recordingStatusSection: some View {
+    private var statusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if isProcessingRecording {
                 ProgressView("Transcribing your letter")
                     .font(selectedFontDesignPreference.font(.callout))
-            } else if isRecording {
-                Text("Recording... tap Stop to finish.")
-                    .font(selectedFontDesignPreference.font(.callout))
-                    .foregroundStyle(.secondary)
             }
 
             if let message {
@@ -2398,11 +2393,15 @@ private struct FutureLetterComposerView: View {
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
             DatePicker(
-                "Delivery Date & Time",
                 selection: $deliveryDate,
                 in: Date()...,
                 displayedComponents: [.date, .hourAndMinute]
-            )
+            ) {
+                Image(systemName: "calendar")
+                    .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel("Delivery Date & Time")
+            }
             .font(selectedFontDesignPreference.font(.body))
             .onChange(of: deliveryDate) { _, _ in
                 deactivateTextEditing()
@@ -2458,16 +2457,28 @@ private struct FutureLetterComposerView: View {
         .buttonStyle(.plain)
     }
 
-    private var saveButton: some View {
-        Button {
-            saveLetter()
-        } label: {
-            Text("Save Letter")
-                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .frame(maxWidth: .infinity)
+    private var actionButtons: some View {
+        HStack(spacing: 12) {
+            Button {
+                saveLetter(shouldSchedule: false)
+            } label: {
+                Text("Save")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canSave)
+
+            Button {
+                saveLetter(shouldSchedule: true)
+            } label: {
+                Text("Schedule")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canSave)
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(!canSave)
     }
 
     private var savedLettersSection: some View {
@@ -2485,24 +2496,12 @@ private struct FutureLetterComposerView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             } else {
                 ForEach(letters) { letter in
-                    Button {
-                        selectedLetter = letter
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(letterTitle(letter))
-                                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Text(letter.deliveryDate.formatted(date: .abbreviated, time: .shortened))
-                                .font(selectedFontDesignPreference.font(.caption))
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(AppThemeCardBackground())
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                    }
-                    .buttonStyle(.plain)
+                    SwipeToDeleteFutureLetterRow(
+                        letter: letter,
+                        title: letterTitle(letter),
+                        onOpen: { selectedLetter = letter },
+                        onDelete: { deleteLetter(letter) }
+                    )
                 }
             }
         }
@@ -2588,7 +2587,7 @@ private struct FutureLetterComposerView: View {
         bodyText = trimmedBody.isEmpty ? trimmedTranscript : "\(trimmedBody)\n\n\(trimmedTranscript)"
     }
 
-    private func saveLetter() {
+    private func saveLetter(shouldSchedule: Bool) {
         focusedField = nil
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2601,12 +2600,15 @@ private struct FutureLetterComposerView: View {
 
         Task {
             do {
-                var notificationMessage = "Letter saved."
-                do {
-                    let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
-                    letter.notificationIdentifier = notificationID
-                } catch {
-                    notificationMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                var resultMessage = "Letter saved."
+                if shouldSchedule {
+                    do {
+                        let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                        letter.notificationIdentifier = notificationID
+                        resultMessage = "Letter scheduled."
+                    } catch {
+                        resultMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                    }
                 }
 
                 modelContext.insert(letter)
@@ -2614,11 +2616,22 @@ private struct FutureLetterComposerView: View {
                 title = ""
                 bodyText = ""
                 deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
-                message = notificationMessage
+                message = resultMessage
             } catch {
                 message = error.localizedDescription
             }
         }
+    }
+
+    private func deleteLetter(_ letter: FutureLetter) {
+        if let notificationIdentifier = letter.notificationIdentifier {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
+        }
+        if selectedLetter?.id == letter.id {
+            selectedLetter = nil
+        }
+        modelContext.delete(letter)
+        try? modelContext.save()
     }
 
     private func letterTitle(_ letter: FutureLetter) -> String {
@@ -2631,9 +2644,92 @@ private struct FutureLetterComposerView: View {
     }
 }
 
+private struct SwipeToDeleteFutureLetterRow: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    let letter: FutureLetter
+    let title: String
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+    @State private var horizontalOffset: CGFloat = 0
+    @GestureState private var dragTranslation: CGFloat = 0
+
+    private let deleteWidth: CGFloat = 86
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive) {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                    horizontalOffset = 0
+                }
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
+                    .labelStyle(.iconOnly)
+                    .frame(width: deleteWidth)
+                    .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .background(Color.red.opacity(0.88))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+
+            Button {
+                if horizontalOffset == 0 {
+                    onOpen()
+                } else {
+                    closeRow()
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(letter.deliveryDate.formatted(date: .abbreviated, time: .shortened))
+                        .font(selectedFontDesignPreference.font(.caption))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(AppThemeCardBackground())
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+            }
+            .buttonStyle(.plain)
+            .offset(x: displayedOffset)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12)
+                    .updating($dragTranslation) { value, state, _ in
+                        state = value.translation.width
+                    }
+                    .onEnded { value in
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                            let finalOffset = horizontalOffset + value.translation.width
+                            horizontalOffset = finalOffset < -36 ? -deleteWidth : 0
+                        }
+                    }
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func closeRow() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+            horizontalOffset = 0
+        }
+    }
+
+    private var displayedOffset: CGFloat {
+        min(0, max(-deleteWidth, horizontalOffset + dragTranslation))
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
 private struct FutureLetterDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @StateObject private var recorder = AudioRecorder()
     let letter: FutureLetter
@@ -2652,16 +2748,7 @@ private struct FutureLetterDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 composeSection
                 deliverySection
-                saveButton
-
-                Button(role: .destructive) {
-                    deleteLetter()
-                } label: {
-                    Text("Delete Letter")
-                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                actionButtons
             }
             .padding()
         }
@@ -2694,7 +2781,7 @@ private struct FutureLetterDetailView: View {
 
             letterBodyEditor(placeholder: letterBodyPlaceholder)
             compositionModePicker
-            recordingStatusSection
+            statusSection
         }
     }
 
@@ -2735,15 +2822,11 @@ private struct FutureLetterDetailView: View {
         mode == .record && isRecording ? "stop.fill" : mode.systemImage
     }
 
-    private var recordingStatusSection: some View {
+    private var statusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if isProcessingRecording {
                 ProgressView("Transcribing your letter")
                     .font(selectedFontDesignPreference.font(.callout))
-            } else if isRecording {
-                Text("Recording... tap Stop to finish.")
-                    .font(selectedFontDesignPreference.font(.callout))
-                    .foregroundStyle(.secondary)
             }
 
             if let message {
@@ -2792,11 +2875,15 @@ private struct FutureLetterDetailView: View {
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
             DatePicker(
-                "Delivery Date & Time",
                 selection: $deliveryDate,
                 in: Date()...,
                 displayedComponents: [.date, .hourAndMinute]
-            )
+            ) {
+                Image(systemName: "calendar")
+                    .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel("Delivery Date & Time")
+            }
             .font(selectedFontDesignPreference.font(.body))
             .onChange(of: deliveryDate) { _, _ in
                 deactivateTextEditing()
@@ -2852,16 +2939,28 @@ private struct FutureLetterDetailView: View {
         .buttonStyle(.plain)
     }
 
-    private var saveButton: some View {
-        Button {
-            saveChanges()
-        } label: {
-            Text("Save Letter")
-                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .frame(maxWidth: .infinity)
+    private var actionButtons: some View {
+        HStack(spacing: 12) {
+            Button {
+                saveChanges(shouldSchedule: false)
+            } label: {
+                Text("Save")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canSave)
+
+            Button {
+                saveChanges(shouldSchedule: true)
+            } label: {
+                Text("Schedule")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canSave)
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(!canSave)
     }
 
     private var canSave: Bool {
@@ -2946,7 +3045,7 @@ private struct FutureLetterDetailView: View {
         bodyText = trimmedBody.isEmpty ? trimmedTranscript : "\(trimmedBody)\n\n\(trimmedTranscript)"
     }
 
-    private func saveChanges() {
+    private func saveChanges(shouldSchedule: Bool) {
         focusedField = nil
         if let notificationIdentifier = letter.notificationIdentifier {
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
@@ -2961,29 +3060,23 @@ private struct FutureLetterDetailView: View {
 
         Task {
             do {
-                var notificationMessage = "Letter saved."
-                do {
-                    let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
-                    letter.notificationIdentifier = notificationID
-                } catch {
-                    notificationMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                var resultMessage = "Letter saved."
+                if shouldSchedule {
+                    do {
+                        let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                        letter.notificationIdentifier = notificationID
+                        resultMessage = "Letter scheduled."
+                    } catch {
+                        resultMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                    }
                 }
 
                 try modelContext.save()
-                message = notificationMessage
+                message = resultMessage
             } catch {
                 message = error.localizedDescription
             }
         }
-    }
-
-    private func deleteLetter() {
-        if let notificationIdentifier = letter.notificationIdentifier {
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
-        }
-        modelContext.delete(letter)
-        try? modelContext.save()
-        dismiss()
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
