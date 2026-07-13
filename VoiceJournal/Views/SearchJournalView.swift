@@ -2260,6 +2260,7 @@ private struct FutureLetterComposerView: View {
     @State private var isProcessingRecording = false
     @State private var compositionMode = FutureLetterCompositionMode.record
     @State private var message: String?
+    @State private var currentDate = Date()
     @FocusState private var focusedField: FutureLetterFocusedField?
 
     var body: some View {
@@ -2268,9 +2269,13 @@ private struct FutureLetterComposerView: View {
                 composeSection
                 deliverySection
                 actionButtons
+                readyLettersSection
                 savedLettersSection
             }
             .padding()
+        }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { date in
+            currentDate = date
         }
         .scrollDismissesKeyboard(.interactively)
         .background {
@@ -2505,8 +2510,38 @@ private struct FutureLetterComposerView: View {
         )
     }
 
+    @ViewBuilder
+    private var readyLettersSection: some View {
+        if !readyScheduledLetters.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Ready Letters")
+                    .font(selectedFontDesignPreference.font(.headline))
+
+                ForEach(readyScheduledLetters) { letter in
+                    SwipeToDeleteFutureLetterRow(
+                        letter: letter,
+                        title: letterTitle(letter),
+                        onOpen: { selectedLetter = letter },
+                        onDelete: { deleteLetter(letter) }
+                    )
+                }
+            }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    deactivateTextEditing()
+                }
+            )
+        }
+    }
+
     private var savedDraftLetters: [FutureLetter] {
         letters.filter { $0.notificationIdentifier == nil }
+    }
+
+    private var readyScheduledLetters: [FutureLetter] {
+        letters.filter { letter in
+            letter.notificationIdentifier != nil && letter.deliveryDate <= currentDate
+        }
     }
 
     private var canSave: Bool {
@@ -3122,17 +3157,12 @@ private struct FutureLetterDetailView: View {
 private enum FutureLetterNotificationScheduler {
     static func schedule(letter: FutureLetter) async throws -> String {
         let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            guard granted else { throw FutureLetterError.notificationPermissionDenied }
-        } else if settings.authorizationStatus == .denied {
-            throw FutureLetterError.notificationPermissionDenied
-        }
+        _ = try await verifiedNotificationSettings(center)
 
         let content = UNMutableNotificationContent()
         content.title = "Letter to Future Me"
-        content.body = "A letter you saved is ready to read."
+        let title = letter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        content.body = title.isEmpty ? "A letter you saved is ready to read." : title
         content.sound = .default
         content.userInfo = ["futureLetterID": letter.id.uuidString]
 
@@ -3145,18 +3175,63 @@ private enum FutureLetterNotificationScheduler {
         let identifier = "future-letter-\(letter.id.uuidString)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         try await center.add(request)
+        try await verifyPendingRequest(identifier: identifier, center: center)
         return identifier
+    }
+
+    private static func verifiedNotificationSettings(_ center: UNUserNotificationCenter) async throws -> UNNotificationSettings {
+        var settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            guard granted else { throw FutureLetterError.notificationPermissionDenied }
+            settings = await center.notificationSettings()
+        case .denied:
+            throw FutureLetterError.notificationPermissionDenied
+        case .provisional, .ephemeral:
+            throw FutureLetterError.notificationAlertsDisabled
+        case .authorized:
+            break
+        @unknown default:
+            throw FutureLetterError.notificationPermissionDenied
+        }
+
+        guard settings.alertSetting == .enabled else {
+            throw FutureLetterError.notificationAlertsDisabled
+        }
+
+        if settings.scheduledDeliverySetting == .enabled {
+            throw FutureLetterError.notificationScheduledSummaryEnabled
+        }
+
+        return settings
+    }
+
+    private static func verifyPendingRequest(identifier: String, center: UNUserNotificationCenter) async throws {
+        let requests = await center.pendingNotificationRequests()
+        guard requests.contains(where: { $0.identifier == identifier }) else {
+            throw FutureLetterError.notificationRequestNotRegistered
+        }
     }
 }
 
 private enum FutureLetterError: LocalizedError {
     case notificationPermissionDenied
+    case notificationAlertsDisabled
+    case notificationScheduledSummaryEnabled
+    case notificationRequestNotRegistered
     case scheduledTimeTooSoon
 
     var errorDescription: String? {
         switch self {
         case .notificationPermissionDenied:
             "Notification permission is needed to deliver letters in the app."
+        case .notificationAlertsDisabled:
+            "Notification alerts are off for Flara Day. Turn on alerts in iPhone Settings > Notifications > Flara Day."
+        case .notificationScheduledSummaryEnabled:
+            "Scheduled Summary is on for Flara Day. Turn it off in iPhone Settings > Notifications > Flara Day so letters arrive at the exact time."
+        case .notificationRequestNotRegistered:
+            "The notification could not be added to iOS. Please try scheduling it again."
         case .scheduledTimeTooSoon:
             "Choose a delivery time at least a few seconds in the future."
         }
