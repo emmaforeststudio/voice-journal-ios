@@ -46,19 +46,27 @@ Notes: Journal text is processed to generate the final journal draft.
 
 Data type: User ID
 
-Collected: No for current app, unless you add accounts, cloud sync, analytics, or subscription account linking.
+Recommended answer for version 1.0: No.
+
+Reason: The app does not require user accounts, cloud sync, analytics, or subscription account linking.
 
 ### Diagnostics
 
-Collected: No for current custom app code, unless you add crash reporting, analytics, or Cloudflare/OpenAI logs that you treat as diagnostics.
+Recommended answer for version 1.0: No for app-collected diagnostics.
+
+Reason: The app does not include a third-party crash reporting or analytics SDK. Cloudflare/OpenAI may process technical service logs for backend reliability, but Flara Day should not intentionally collect audio, transcripts, or journal text as diagnostics.
 
 ### Contact Info
 
-Collected: No in the app, unless you add support email collection or accounts.
+Recommended answer for version 1.0: No.
+
+Reason: The app does not collect contact information in-app. The support page uses a direct email link instead of a support form.
 
 ### Usage Data
 
-Collected: No in the app, unless analytics are added.
+Recommended answer for version 1.0: No.
+
+Reason: The app does not include custom analytics.
 
 ## Current Local Storage
 
@@ -72,11 +80,10 @@ The following are stored locally on device:
 
 Local-only data may not need to be reported as collected if it is not transmitted off device, but review Apple's current App Privacy instructions when submitting.
 
-## Open Questions For Emma
+## Version 1.0 Assumptions
 
-- Will there be subscriptions at launch?
-- Will there be user accounts at launch?
-- Will support requests collect email addresses through a form?
-- Will Cloudflare logs be retained or reviewed?
-- Will any analytics/crash reporting SDK be added?
-
+- No subscriptions at launch.
+- No user accounts at launch.
+- No support request form at launch.
+- No custom analytics or crash reporting SDK at launch.
+- Technical backend logs may be used only for debugging, reliability, and security, and should not intentionally include raw audio, full transcripts, or journal entries.
