@@ -3134,9 +3134,14 @@ private enum FutureLetterNotificationScheduler {
         content.title = "Letter to Future Me"
         content.body = "A letter you saved is ready to read."
         content.sound = .default
+        content.userInfo = ["futureLetterID": letter.id.uuidString]
 
-        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: letter.deliveryDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let timeInterval = letter.deliveryDate.timeIntervalSinceNow
+        guard timeInterval >= 5 else {
+            throw FutureLetterError.scheduledTimeTooSoon
+        }
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
         let identifier = "future-letter-\(letter.id.uuidString)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         try await center.add(request)
@@ -3146,11 +3151,14 @@ private enum FutureLetterNotificationScheduler {
 
 private enum FutureLetterError: LocalizedError {
     case notificationPermissionDenied
+    case scheduledTimeTooSoon
 
     var errorDescription: String? {
         switch self {
         case .notificationPermissionDenied:
             "Notification permission is needed to deliver letters in the app."
+        case .scheduledTimeTooSoon:
+            "Choose a delivery time at least a few seconds in the future."
         }
     }
 }
