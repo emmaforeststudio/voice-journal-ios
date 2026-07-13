@@ -159,8 +159,9 @@ async function transcribe(audio, { apiKey, fetchImpl, allowEmpty = false }) {
     "prompt",
     [
       "This is a personal journal entry.",
-      "The speaker may code-switch or mix languages within the same sentence.",
+      "The speaker may code-switch or mix English, Chinese, Korean, Spanish, French, German, and Japanese within the same sentence.",
       "Transcribe exactly what is spoken, preserving each language in its original script when clear.",
+      "Keep Korean in Hangul, Japanese in kana/kanji, Chinese in hanzi, and accented Latin text when spoken.",
       "Do not translate mixed-language speech into one language.",
       "Preserve proper nouns, app names, and informal wording accurately.",
     ].join(" ")
@@ -280,6 +281,7 @@ async function polishJournal(transcript, livePreviewTranscript = "", { apiKey, f
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-4o-mini",
+      temperature: 0,
       messages: [
         {
           role: "system",
@@ -288,6 +290,9 @@ async function polishJournal(transcript, livePreviewTranscript = "", { apiKey, f
             "Remove filler words, false starts, and accidental repetition.",
             "Correct obvious transcription mistakes only when context makes the correction clear.",
             "Preserve the writer's meaning, facts, emotional tone, and first-person voice.",
+            "The speaker may intentionally mix English, Chinese, Korean, Spanish, French, German, and Japanese, even inside one sentence.",
+            "Preserve each spoken language in its original script: keep Korean in Hangul, Japanese in kana/kanji, Chinese in hanzi, and accented Latin text when present.",
+            "Never translate, romanize, or replace mixed-language phrases with the dominant language.",
             "Do not invent events, advice, interpretations, or details.",
             "The final audio transcription is the primary source.",
             "The latest live preview is a recovery source that may contain earlier speech omitted from the final transcription.",

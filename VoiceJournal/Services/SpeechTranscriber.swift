@@ -4,21 +4,41 @@ import Speech
 
 @MainActor
 final class SpeechTranscriber: ObservableObject {
+    private let automaticTranscriptionLanguages: [JournalLanguage] = [
+        .english,
+        .chinese,
+        .korean,
+        .spanish,
+        .french,
+        .german,
+        .japanese
+    ]
+
     func transcribeAudioAutomatically(at url: URL) async throws -> (text: String, language: JournalLanguage) {
-        async let englishResult = try? transcribeAudio(at: url, language: .english)
-        async let chineseResult = try? transcribeAudio(at: url, language: .chinese)
+        let results = await withTaskGroup(of: (JournalLanguage, String)?.self) { group in
+            for language in automaticTranscriptionLanguages {
+                group.addTask { [url] in
+                    do {
+                        let text = try await self.transcribeAudio(at: url, language: language)
+                        return (language, text)
+                    } catch {
+                        return nil
+                    }
+                }
+            }
 
-        let (english, chinese) = await (englishResult, chineseResult)
-        if let chinese, chinese.hanCharacterCount >= 2 {
-            return (chinese, .chinese)
+            var values: [(language: JournalLanguage, text: String)] = []
+            for await result in group {
+                guard let result else { continue }
+                values.append(result)
+            }
+            return values
         }
 
-        if let english, !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return (english, .english)
-        }
-
-        if let chinese, !chinese.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return (chinese, .chinese)
+        if let best = results
+            .filter({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            .max(by: { transcriptionScore($0.text, language: $0.language) < transcriptionScore($1.text, language: $1.language) }) {
+            return (best.text, best.language)
         }
 
         throw SpeechTranscriptionError.emptyResult
@@ -81,12 +101,43 @@ final class SpeechTranscriber: ObservableObject {
             }
         }
     }
+
+    private func transcriptionScore(_ text: String, language: JournalLanguage) -> Int {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+
+        let scriptBonus: Int
+        switch language {
+        case .chinese:
+            scriptBonus = trimmed.hanCharacterCount * 8
+        case .korean:
+            scriptBonus = trimmed.hangulCharacterCount * 8
+        case .japanese:
+            scriptBonus = trimmed.kanaCharacterCount * 8 + trimmed.hanCharacterCount * 2
+        default:
+            scriptBonus = 0
+        }
+
+        return trimmed.count + scriptBonus
+    }
 }
 
 private extension String {
     var hanCharacterCount: Int {
         unicodeScalars.filter { scalar in
             (0x4E00...0x9FFF).contains(scalar.value)
+        }.count
+    }
+
+    var hangulCharacterCount: Int {
+        unicodeScalars.filter { scalar in
+            (0xAC00...0xD7AF).contains(scalar.value) || (0x1100...0x11FF).contains(scalar.value)
+        }.count
+    }
+
+    var kanaCharacterCount: Int {
+        unicodeScalars.filter { scalar in
+            (0x3040...0x30FF).contains(scalar.value)
         }.count
     }
 }
