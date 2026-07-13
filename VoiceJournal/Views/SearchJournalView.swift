@@ -165,17 +165,17 @@ struct InsightsJournalView: View {
     }
 
     private var themesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Month Recap")
-                    .font(selectedFontDesignPreference.font(.headline))
+                    .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button {
                     resetThemeCloudMonthToCurrent()
                 } label: {
                     Text(themeCloudMonthLabel)
-                        .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
+                        .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .contentShape(Rectangle())
                 }
@@ -195,8 +195,8 @@ struct InsightsJournalView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.top, 18)
-        .padding(.bottom, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
         .frame(maxHeight: .infinity)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
@@ -2167,7 +2167,7 @@ private struct InsightMemoryCard: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 104, alignment: .center)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .contentShape(RoundedRectangle(cornerRadius: 28))
@@ -2248,12 +2248,12 @@ private struct FutureLetterComposerView: View {
     @State private var selectedLetter: FutureLetter?
     @State private var isRecording = false
     @State private var isProcessingRecording = false
+    @State private var compositionMode = FutureLetterCompositionMode.record
     @State private var message: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                letterHeader
                 composeSection
                 deliverySection
                 saveButton
@@ -2272,20 +2272,6 @@ private struct FutureLetterComposerView: View {
         }
     }
 
-    private var letterHeader: some View {
-        VStack(alignment: .center, spacing: 10) {
-            Image(systemName: "envelope")
-                .font(selectedFontDesignPreference.font(.title, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-
-            Text("Letter to Future Me")
-                .font(selectedFontDesignPreference.font(.title2, weight: .bold))
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 6)
-    }
-
     private var composeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField("Title", text: $title)
@@ -2295,24 +2281,47 @@ private struct FutureLetterComposerView: View {
                 .background(AppThemeCardBackground())
                 .clipShape(RoundedRectangle(cornerRadius: 18))
 
-            TextEditor(text: $bodyText)
-                .font(selectedFontDesignPreference.font(.body))
-                .frame(minHeight: 220)
-                .scrollContentBackground(.hidden)
-                .padding(10)
-                .background(AppThemeCardBackground())
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(alignment: .topLeading) {
-                    if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Write your letter, or record it below.")
-                            .font(selectedFontDesignPreference.font(.body))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 18)
-                            .allowsHitTesting(false)
-                    }
-                }
+            compositionModePicker
 
+            if compositionMode == .record {
+                recordLetterSection
+            } else {
+                letterBodyEditor(placeholder: "Write your letter.")
+            }
+        }
+    }
+
+    private var compositionModePicker: some View {
+        HStack(spacing: 10) {
+            compositionModeButton(.record)
+            compositionModeButton(.type)
+        }
+    }
+
+    private func compositionModeButton(_ mode: FutureLetterCompositionMode) -> some View {
+        Button {
+            compositionMode = mode
+            message = nil
+        } label: {
+            Label(mode.displayName, systemImage: mode.systemImage)
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(compositionMode == mode ? .white : Color.accentColor)
+        .background {
+            if compositionMode == mode {
+                Color.accentColor
+            } else {
+                AppThemeCardBackground()
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var recordLetterSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Button {
                 toggleRecording()
             } label: {
@@ -2322,6 +2331,18 @@ private struct FutureLetterComposerView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(isProcessingRecording)
+
+            if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Record your letter. The transcript will appear here after recording.")
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(AppThemeCardBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            } else {
+                letterBodyEditor(placeholder: "Recorded transcript")
+            }
 
             if isProcessingRecording {
                 ProgressView("Transcribing your letter")
@@ -2335,6 +2356,26 @@ private struct FutureLetterComposerView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func letterBodyEditor(placeholder: String) -> some View {
+        TextEditor(text: $bodyText)
+            .font(selectedFontDesignPreference.font(.body))
+            .frame(minHeight: 220)
+            .scrollContentBackground(.hidden)
+            .padding(10)
+            .background(AppThemeCardBackground())
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(alignment: .topLeading) {
+                if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .font(selectedFontDesignPreference.font(.body))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                        .allowsHitTesting(false)
+                }
+            }
     }
 
     private var deliverySection: some View {
@@ -2624,6 +2665,29 @@ private enum FutureLetterError: LocalizedError {
         switch self {
         case .notificationPermissionDenied:
             "Notification permission is needed to deliver letters in the app."
+        }
+    }
+}
+
+private enum FutureLetterCompositionMode: CaseIterable {
+    case record
+    case type
+
+    var displayName: String {
+        switch self {
+        case .record:
+            "Record"
+        case .type:
+            "Type"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .record:
+            "mic.fill"
+        case .type:
+            "keyboard"
         }
     }
 }
