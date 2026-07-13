@@ -3164,6 +3164,7 @@ private enum FutureLetterNotificationScheduler {
         let title = letter.title.trimmingCharacters(in: .whitespacesAndNewlines)
         content.body = title.isEmpty ? "A letter you saved is ready to read." : title
         content.sound = .default
+        content.interruptionLevel = .active
         content.userInfo = ["futureLetterID": letter.id.uuidString]
 
         let timeInterval = letter.deliveryDate.timeIntervalSinceNow
