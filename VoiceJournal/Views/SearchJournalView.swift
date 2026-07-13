@@ -24,21 +24,19 @@ struct InsightsJournalView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 18) {
+            GeometryReader { proxy in
+                VStack(alignment: .leading, spacing: 10) {
                         insightsHeader
-                        futureLetterSection
                         metricsSection
                         themesSection
+                            .frame(maxHeight: .infinity)
                         memoryCardSection
-                    }
-                    .padding(.horizontal)
-                    .padding(.top)
-
-                    Color.clear
-                        .frame(height: 18)
+                        futureLetterSection
                 }
+                .padding(.horizontal)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
             .id(renderedFontPreference)
             .background(AppThemeBackground())
@@ -197,7 +195,9 @@ struct InsightsJournalView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 22)
+        .padding(.top, 18)
+        .padding(.bottom, 16)
+        .frame(maxHeight: .infinity)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .gesture(
@@ -2091,12 +2091,12 @@ private struct InsightMetricCard: View {
     let imageName: String
 
     var body: some View {
-        VStack(alignment: .center, spacing: 5) {
+        VStack(alignment: .center, spacing: 4) {
             Image(imageName)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 29, height: 29)
+                .frame(width: 24, height: 24)
                 .foregroundStyle(Color.accentColor)
             Text(value)
                 .font(selectedFontDesignPreference.font(.headline, weight: .bold))
@@ -2109,9 +2109,9 @@ private struct InsightMetricCard: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.72)
         }
-        .frame(maxWidth: .infinity, minHeight: 108, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .center)
         .padding(.horizontal, 10)
-        .padding(.vertical, 14)
+        .padding(.vertical, 10)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
     }
@@ -2145,7 +2145,7 @@ private struct InsightMemoryCard: View {
     }
 
     private func cardContent(entryTitle: String) -> some View {
-        VStack(alignment: .center, spacing: 24) {
+        VStack(alignment: .center, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
@@ -2158,17 +2158,16 @@ private struct InsightMemoryCard: View {
             .frame(maxWidth: .infinity, alignment: .center)
 
             Text(entryTitle)
-                .font(selectedFontDesignPreference.font(.title2, weight: .bold))
+                .font(selectedFontDesignPreference.font(.title3, weight: .bold))
                 .foregroundStyle(entry == nil ? .secondary : Color.accentColor)
                 .multilineTextAlignment(.center)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .center)
-            .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity, minHeight: 140, alignment: .center)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .contentShape(RoundedRectangle(cornerRadius: 28))
@@ -2206,19 +2205,24 @@ private struct LetterToFutureMeCard: View {
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
 
     var body: some View {
-        VStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
+            Spacer(minLength: 0)
+
             Image(systemName: "envelope")
-                .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
+                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
 
             Text("Letter to Future Me")
                 .font(selectedFontDesignPreference.font(.headline))
                 .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, minHeight: 118, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .center)
         .padding(.horizontal, 18)
-        .padding(.vertical, 18)
+        .padding(.vertical, 10)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .contentShape(RoundedRectangle(cornerRadius: 28))
@@ -2689,8 +2693,7 @@ private struct ThemeCloudView: View {
                 themeFlow(bottomThemes, startIndex: topThemes.count + 1)
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 236, alignment: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 4)
         .clipped()
     }
