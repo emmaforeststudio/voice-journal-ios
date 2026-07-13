@@ -27,10 +27,10 @@ struct InsightsJournalView: View {
             GeometryReader { proxy in
                 VStack(alignment: .leading, spacing: 10) {
                         insightsHeader
+                        memoryCardSection
                         metricsSection
                         themesSection
-                            .frame(maxHeight: .infinity)
-                        memoryCardSection
+                            .frame(maxHeight: .infinity, alignment: .top)
                         futureLetterSection
                 }
                 .padding(.horizontal)
@@ -197,7 +197,7 @@ struct InsightsJournalView: View {
         .padding(.horizontal, 18)
         .padding(.top, 12)
         .padding(.bottom, 12)
-        .frame(maxHeight: .infinity)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .gesture(
@@ -2281,13 +2281,9 @@ private struct FutureLetterComposerView: View {
                 .background(AppThemeCardBackground())
                 .clipShape(RoundedRectangle(cornerRadius: 18))
 
+            letterBodyEditor(placeholder: letterBodyPlaceholder)
             compositionModePicker
-
-            if compositionMode == .record {
-                recordLetterSection
-            } else {
-                letterBodyEditor(placeholder: "Write your letter.")
-            }
+            recordingStatusSection
         }
     }
 
@@ -2300,53 +2296,35 @@ private struct FutureLetterComposerView: View {
 
     private func compositionModeButton(_ mode: FutureLetterCompositionMode) -> some View {
         Button {
-            compositionMode = mode
-            message = nil
+            handleCompositionModeTap(mode)
         } label: {
             Label(mode.displayName, systemImage: mode.systemImage)
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .padding(.vertical, 9)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(compositionMode == mode ? .white : Color.accentColor)
+        .foregroundStyle(compositionMode == mode || (mode == .record && isRecording) ? .white : Color.accentColor)
         .background {
-            if compositionMode == mode {
+            if compositionMode == mode || (mode == .record && isRecording) {
                 Color.accentColor
             } else {
                 AppThemeCardBackground()
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .disabled(isProcessingRecording)
     }
 
-    private var recordLetterSection: some View {
+    private var recordingStatusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button {
-                toggleRecording()
-            } label: {
-                Label(recordingButtonTitle, systemImage: isRecording ? "stop.fill" : "mic.fill")
-                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isProcessingRecording)
-
-            if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Record your letter. The transcript will appear here after recording.")
-                    .font(selectedFontDesignPreference.font(.callout))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(AppThemeCardBackground())
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
-            } else {
-                letterBodyEditor(placeholder: "Recorded transcript")
-            }
-
             if isProcessingRecording {
                 ProgressView("Transcribing your letter")
                     .font(selectedFontDesignPreference.font(.callout))
+            } else if isRecording {
+                Text("Recording... tap Record again to stop.")
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
             }
 
             if let message {
@@ -2355,6 +2333,19 @@ private struct FutureLetterComposerView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private var letterBodyPlaceholder: String {
+        if isRecording {
+            return "Recording..."
+        }
+
+        switch compositionMode {
+        case .record:
+            return "Record your letter. The transcript will appear here."
+        case .type:
+            return "Write your letter."
         }
     }
 
@@ -2482,15 +2473,25 @@ private struct FutureLetterComposerView: View {
         }
     }
 
-    private var recordingButtonTitle: String {
-        if isProcessingRecording { return "Processing Recording" }
-        return isRecording ? "Stop Recording" : "Record Letter"
-    }
-
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         deliveryMethod == .inAppNotification
+    }
+
+    private func handleCompositionModeTap(_ mode: FutureLetterCompositionMode) {
+        message = nil
+
+        switch mode {
+        case .record:
+            compositionMode = .record
+            toggleRecording()
+        case .type:
+            compositionMode = .type
+            if isRecording {
+                stopRecording()
+            }
+        }
     }
 
     private func toggleRecording() {
@@ -2687,7 +2688,7 @@ private enum FutureLetterCompositionMode: CaseIterable {
         case .record:
             "mic.fill"
         case .type:
-            "keyboard"
+            "square.and.pencil"
         }
     }
 }
