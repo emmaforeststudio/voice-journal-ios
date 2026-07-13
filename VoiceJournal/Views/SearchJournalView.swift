@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import UIKit
+import UserNotifications
 import UniformTypeIdentifiers
 
 struct InsightsJournalView: View {
@@ -27,9 +28,10 @@ struct InsightsJournalView: View {
                 VStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 18) {
                         insightsHeader
-                        memoryCardSection
+                        futureLetterSection
                         metricsSection
                         themesSection
+                        memoryCardSection
                     }
                     .padding(.horizontal)
                     .padding(.top)
@@ -62,6 +64,8 @@ struct InsightsJournalView: View {
                         makeMarkdownExport: makeMarkdownExport,
                         deleteAllJournals: deleteAllJournals
                     )
+                case .futureLetter:
+                    FutureLetterComposerView()
                 }
             }
             .navigationDestination(item: $selectedMemoryEntry) { entry in
@@ -139,6 +143,7 @@ struct InsightsJournalView: View {
 
     private enum InsightsRoute: Hashable {
         case settings
+        case futureLetter
     }
 
     private var metricsSection: some View {
@@ -152,6 +157,13 @@ struct InsightsJournalView: View {
         InsightMemoryCard(mode: selectedMemoryCardMode, entry: memoryCardEntry) { entry in
             selectedMemoryEntry = entry
         }
+    }
+
+    private var futureLetterSection: some View {
+        NavigationLink(value: InsightsRoute.futureLetter) {
+            LetterToFutureMeCard()
+        }
+        .buttonStyle(.plain)
     }
 
     private var themesSection: some View {
@@ -2187,6 +2199,428 @@ private struct InsightMemoryCard: View {
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct LetterToFutureMeCard: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 12) {
+            Image(systemName: "envelope")
+                .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            Text("Letter to Future Me")
+                .font(selectedFontDesignPreference.font(.headline))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .center)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
+        .background(AppThemeCardBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 28))
+        .contentShape(RoundedRectangle(cornerRadius: 28))
+        .accessibilityLabel("Letter to Future Me")
+        .accessibilityHint("Open letter composer")
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct FutureLetterComposerView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @Query(sort: \FutureLetter.deliveryDate, order: .forward) private var letters: [FutureLetter]
+    @StateObject private var recorder = AudioRecorder()
+    @State private var title = ""
+    @State private var bodyText = ""
+    @State private var deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
+    @State private var deliveryMethod = FutureLetterDeliveryMethod.inAppNotification
+    @State private var selectedLetter: FutureLetter?
+    @State private var isRecording = false
+    @State private var isProcessingRecording = false
+    @State private var message: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                letterHeader
+                composeSection
+                deliverySection
+                saveButton
+                savedLettersSection
+            }
+            .padding()
+        }
+        .background(AppThemeBackground())
+        .navigationTitle("Future Letter")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            try? await recorder.prepare()
+        }
+        .navigationDestination(item: $selectedLetter) { letter in
+            FutureLetterDetailView(letter: letter)
+        }
+    }
+
+    private var letterHeader: some View {
+        VStack(alignment: .center, spacing: 10) {
+            Image(systemName: "envelope")
+                .font(selectedFontDesignPreference.font(.title, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            Text("Letter to Future Me")
+                .font(selectedFontDesignPreference.font(.title2, weight: .bold))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 6)
+    }
+
+    private var composeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("Title", text: $title)
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .textInputAutocapitalization(.sentences)
+                .padding(14)
+                .background(AppThemeCardBackground())
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+            TextEditor(text: $bodyText)
+                .font(selectedFontDesignPreference.font(.body))
+                .frame(minHeight: 220)
+                .scrollContentBackground(.hidden)
+                .padding(10)
+                .background(AppThemeCardBackground())
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(alignment: .topLeading) {
+                    if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Write your letter, or record it below.")
+                            .font(selectedFontDesignPreference.font(.body))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+            Button {
+                toggleRecording()
+            } label: {
+                Label(recordingButtonTitle, systemImage: isRecording ? "stop.fill" : "mic.fill")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isProcessingRecording)
+
+            if isProcessingRecording {
+                ProgressView("Transcribing your letter")
+                    .font(selectedFontDesignPreference.font(.callout))
+            }
+
+            if let message {
+                Text(message)
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var deliverySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            DatePicker(
+                "Delivery Date & Time",
+                selection: $deliveryDate,
+                in: Date()...,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .font(selectedFontDesignPreference.font(.body))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Delivery Method")
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                deliveryMethodButton(.inAppNotification, subtitle: "Schedule a private local reminder on this iPhone.", isEnabled: true)
+                deliveryMethodButton(.email, subtitle: "Requires an email delivery service before launch.", isEnabled: false)
+            }
+        }
+        .padding(16)
+        .background(AppThemeCardBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+    }
+
+    private func deliveryMethodButton(_ method: FutureLetterDeliveryMethod, subtitle: String, isEnabled: Bool) -> some View {
+        Button {
+            if isEnabled {
+                deliveryMethod = method
+                message = nil
+            } else {
+                message = "Email delivery needs a backend email provider before it can be enabled."
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: deliveryMethod == method ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(method.displayName)
+                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                        .foregroundStyle(isEnabled ? .primary : .secondary)
+                    Text(subtitle)
+                        .font(selectedFontDesignPreference.font(.caption))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var saveButton: some View {
+        Button {
+            saveLetter()
+        } label: {
+            Text("Save Letter")
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!canSave)
+    }
+
+    private var savedLettersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Saved Letters")
+                .font(selectedFontDesignPreference.font(.headline))
+
+            if letters.isEmpty {
+                Text("Saved future letters will appear here.")
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(AppThemeCardBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            } else {
+                ForEach(letters) { letter in
+                    Button {
+                        selectedLetter = letter
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(letterTitle(letter))
+                                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text(letter.deliveryDate.formatted(date: .abbreviated, time: .shortened))
+                                .font(selectedFontDesignPreference.font(.caption))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(AppThemeCardBackground())
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var recordingButtonTitle: String {
+        if isProcessingRecording { return "Processing Recording" }
+        return isRecording ? "Stop Recording" : "Record Letter"
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        deliveryMethod == .inAppNotification
+    }
+
+    private func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    private func startRecording() {
+        message = nil
+        Task {
+            do {
+                try await recorder.start()
+                isRecording = true
+            } catch {
+                message = error.localizedDescription
+            }
+        }
+    }
+
+    private func stopRecording() {
+        isProcessingRecording = true
+        isRecording = false
+        Task {
+            do {
+                let url = try recorder.stop()
+                defer { recorder.deleteRecording(at: url) }
+                let transcript = try await OpenAIJournalService().previewTranscript(from: url)
+                appendTranscript(transcript)
+                message = "Recording added to your letter."
+            } catch {
+                message = error.localizedDescription
+            }
+            isProcessingRecording = false
+            try? await recorder.prepare()
+        }
+    }
+
+    private func appendTranscript(_ transcript: String) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscript.isEmpty else { return }
+        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        bodyText = trimmedBody.isEmpty ? trimmedTranscript : "\(trimmedBody)\n\n\(trimmedTranscript)"
+    }
+
+    private func saveLetter() {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let letter = FutureLetter(
+            title: trimmedTitle,
+            body: trimmedBody,
+            deliveryDate: deliveryDate,
+            deliveryMethod: deliveryMethod
+        )
+
+        Task {
+            do {
+                let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                letter.notificationIdentifier = notificationID
+                modelContext.insert(letter)
+                try modelContext.save()
+                title = ""
+                bodyText = ""
+                deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
+                message = "Letter saved."
+            } catch {
+                message = error.localizedDescription
+            }
+        }
+    }
+
+    private func letterTitle(_ letter: FutureLetter) -> String {
+        let trimmed = letter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled Letter" : trimmed
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct FutureLetterDetailView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    let letter: FutureLetter
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(letterTitle)
+                    .font(selectedFontDesignPreference.font(.title2, weight: .bold))
+
+                Text(letter.deliveryDate.formatted(date: .long, time: .shortened))
+                    .font(selectedFontDesignPreference.font(.callout))
+                    .foregroundStyle(.secondary)
+
+                Text(letter.body)
+                    .font(selectedFontDesignPreference.font(.body))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+                    .background(AppThemeCardBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+
+                Button(role: .destructive) {
+                    deleteLetter()
+                } label: {
+                    Text("Delete Letter")
+                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding()
+        }
+        .background(AppThemeBackground())
+        .navigationTitle("Future Letter")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var letterTitle: String {
+        let trimmed = letter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled Letter" : trimmed
+    }
+
+    private func deleteLetter() {
+        if let notificationIdentifier = letter.notificationIdentifier {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
+        }
+        modelContext.delete(letter)
+        try? modelContext.save()
+        dismiss()
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private enum FutureLetterNotificationScheduler {
+    static func schedule(letter: FutureLetter) async throws -> String {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            guard granted else { throw FutureLetterError.notificationPermissionDenied }
+        } else if settings.authorizationStatus == .denied {
+            throw FutureLetterError.notificationPermissionDenied
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Letter to Future Me"
+        content.body = "A letter you saved is ready to read."
+        content.sound = .default
+
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: letter.deliveryDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let identifier = "future-letter-\(letter.id.uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        try await center.add(request)
+        return identifier
+    }
+}
+
+private enum FutureLetterError: LocalizedError {
+    case notificationPermissionDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .notificationPermissionDenied:
+            "Notification permission is needed to deliver letters in the app."
+        }
     }
 }
 

@@ -26,7 +26,7 @@ struct VoiceJournalApp: App {
             .tint(AppColorTheme.value(for: themeColorPreference).primaryColor)
             .background(AppThemeBackground())
         }
-        .modelContainer(for: JournalEntry.self)
+        .modelContainer(for: [JournalEntry.self, FutureLetter.self])
     }
 }
 

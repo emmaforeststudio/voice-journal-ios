@@ -38,6 +38,59 @@ final class JournalEntry {
     }
 }
 
+@Model
+final class FutureLetter {
+    var id: UUID
+    var title: String
+    var body: String
+    var deliveryDate: Date
+    var deliveryMethodRawValue: String
+    var notificationIdentifier: String?
+    var createdAt: Date
+    var updatedAt: Date
+
+    var deliveryMethod: FutureLetterDeliveryMethod {
+        get { FutureLetterDeliveryMethod(rawValue: deliveryMethodRawValue) ?? .inAppNotification }
+        set { deliveryMethodRawValue = newValue.rawValue }
+    }
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        body: String,
+        deliveryDate: Date,
+        deliveryMethod: FutureLetterDeliveryMethod,
+        notificationIdentifier: String? = nil,
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.title = title
+        self.body = body
+        self.deliveryDate = deliveryDate
+        self.deliveryMethodRawValue = deliveryMethod.rawValue
+        self.notificationIdentifier = notificationIdentifier
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+enum FutureLetterDeliveryMethod: String, CaseIterable, Identifiable, Codable {
+    case inAppNotification
+    case email
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .inAppNotification:
+            "In-App Notification"
+        case .email:
+            "Email"
+        }
+    }
+}
+
 enum JournalLanguage: String, CaseIterable, Codable, Identifiable {
     case english
     case chinese
