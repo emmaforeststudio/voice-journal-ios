@@ -5,6 +5,12 @@ import UIKit
 import UserNotifications
 import UniformTypeIdentifiers
 
+enum InsightsRoute: Hashable {
+    case settings
+    case futureLetter
+    case futureLetterDetail(UUID)
+}
+
 struct InsightsJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @Binding var navigationPath: NavigationPath
@@ -65,6 +71,8 @@ struct InsightsJournalView: View {
                     )
                 case .futureLetter:
                     FutureLetterComposerView()
+                case .futureLetterDetail(let letterID):
+                    FutureLetterDestinationView(letterID: letterID)
                 }
             }
             .navigationDestination(item: $selectedMemoryEntry) { entry in
@@ -138,11 +146,6 @@ struct InsightsJournalView: View {
             }
             .accessibilityLabel("Settings")
         }
-    }
-
-    private enum InsightsRoute: Hashable {
-        case settings
-        case futureLetter
     }
 
     private var metricsSection: some View {
@@ -2269,8 +2272,9 @@ private struct FutureLetterComposerView: View {
                 composeSection
                 deliverySection
                 actionButtons
-                readyLettersSection
-                savedLettersSection
+                draftLettersSection
+                scheduledLettersSection
+                deliveredLettersSection
             }
             .padding()
         }
@@ -2479,13 +2483,41 @@ private struct FutureLetterComposerView: View {
         }
     }
 
-    private var savedLettersSection: some View {
+    private var draftLettersSection: some View {
+        letterSection(
+            title: "Draft Letters",
+            emptyMessage: "Unscheduled letters will appear here.",
+            letters: draftLetters
+        )
+    }
+
+    private var scheduledLettersSection: some View {
+        letterSection(
+            title: "Scheduled Letters",
+            emptyMessage: "Letters waiting for their delivery time will appear here.",
+            letters: scheduledLetters
+        )
+    }
+
+    private var deliveredLettersSection: some View {
+        letterSection(
+            title: "Delivered Letters",
+            emptyMessage: "Delivered letters will appear here.",
+            letters: deliveredLetters
+        )
+    }
+
+    private func letterSection(
+        title: String,
+        emptyMessage: String,
+        letters: [FutureLetter]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Saved Letters")
+            Text(title)
                 .font(selectedFontDesignPreference.font(.headline))
 
-            if savedDraftLetters.isEmpty {
-                Text("Saved unscheduled letters will appear here.")
+            if letters.isEmpty {
+                Text(emptyMessage)
                     .font(selectedFontDesignPreference.font(.callout))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -2493,7 +2525,7 @@ private struct FutureLetterComposerView: View {
                     .background(AppThemeCardBackground())
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             } else {
-                ForEach(savedDraftLetters) { letter in
+                ForEach(letters) { letter in
                     SwipeToDeleteFutureLetterRow(
                         letter: letter,
                         title: letterTitle(letter),
@@ -2510,35 +2542,17 @@ private struct FutureLetterComposerView: View {
         )
     }
 
-    @ViewBuilder
-    private var readyLettersSection: some View {
-        if !readyScheduledLetters.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Ready Letters")
-                    .font(selectedFontDesignPreference.font(.headline))
-
-                ForEach(readyScheduledLetters) { letter in
-                    SwipeToDeleteFutureLetterRow(
-                        letter: letter,
-                        title: letterTitle(letter),
-                        onOpen: { selectedLetter = letter },
-                        onDelete: { deleteLetter(letter) }
-                    )
-                }
-            }
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    deactivateTextEditing()
-                }
-            )
-        }
-    }
-
-    private var savedDraftLetters: [FutureLetter] {
+    private var draftLetters: [FutureLetter] {
         letters.filter { $0.notificationIdentifier == nil }
     }
 
-    private var readyScheduledLetters: [FutureLetter] {
+    private var scheduledLetters: [FutureLetter] {
+        letters.filter { letter in
+            letter.notificationIdentifier != nil && letter.deliveryDate > currentDate
+        }
+    }
+
+    private var deliveredLetters: [FutureLetter] {
         letters.filter { letter in
             letter.notificationIdentifier != nil && letter.deliveryDate <= currentDate
         }
@@ -2807,6 +2821,24 @@ private struct SwipeToDeleteFutureLetterRow: View {
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct FutureLetterDestinationView: View {
+    @Query private var letters: [FutureLetter]
+    let letterID: UUID
+
+    var body: some View {
+        if let letter = letters.first(where: { $0.id == letterID }) {
+            FutureLetterDetailView(letter: letter)
+        } else {
+            ContentUnavailableView(
+                "Letter Not Found",
+                systemImage: "envelope",
+                description: Text("This letter may have been deleted.")
+            )
+            .background(AppThemeBackground())
+        }
     }
 }
 

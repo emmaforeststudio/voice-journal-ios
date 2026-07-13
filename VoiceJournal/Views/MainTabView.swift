@@ -2,10 +2,12 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
+    @EnvironmentObject private var notificationNavigationCoordinator: NotificationNavigationCoordinator
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @State private var selectedTab = 0
     @State private var calendarResetToken = 0
     @State private var insightsNavigationPath = NavigationPath()
+    @State private var isOpeningNotificationLetter = false
 
     init() {
         Self.applyTabBarAppearance(for: .system)
@@ -51,6 +53,10 @@ struct MainTabView: View {
         .id(journalFontDesignPreference)
         .onAppear {
             Self.applyTabBarAppearance(for: selectedFontDesignPreference)
+#if DEBUG
+            openDebugFutureLetterIfRequested()
+#endif
+            openRequestedFutureLetter()
         }
         .onChange(of: journalFontDesignPreference) { _, _ in
             Self.applyTabBarAppearance(for: selectedFontDesignPreference)
@@ -59,15 +65,45 @@ struct MainTabView: View {
             if newValue == 1, oldValue != 1 {
                 calendarResetToken += 1
             }
-            if newValue == 2, oldValue != 2 {
+            if newValue == 2,
+               oldValue != 2,
+               !isOpeningNotificationLetter {
                 insightsNavigationPath = NavigationPath()
             }
+        }
+        .onChange(of: notificationNavigationCoordinator.futureLetterID) { _, _ in
+            openRequestedFutureLetter()
         }
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
+
+    private func openRequestedFutureLetter() {
+        guard let letterID = notificationNavigationCoordinator.futureLetterID else { return }
+        isOpeningNotificationLetter = true
+        selectedTab = 2
+        insightsNavigationPath = NavigationPath()
+        insightsNavigationPath.append(InsightsRoute.futureLetterDetail(letterID))
+        notificationNavigationCoordinator.consumeFutureLetter(id: letterID)
+        Task { @MainActor in
+            await Task.yield()
+            isOpeningNotificationLetter = false
+        }
+    }
+
+#if DEBUG
+    private func openDebugFutureLetterIfRequested() {
+        let arguments = CommandLine.arguments
+        guard let flagIndex = arguments.firstIndex(of: "--open-future-letter"),
+              arguments.indices.contains(flagIndex + 1),
+              let letterID = UUID(uuidString: arguments[flagIndex + 1]) else {
+            return
+        }
+        notificationNavigationCoordinator.openFutureLetter(id: letterID)
+    }
+#endif
 
     private static func applyTabBarAppearance(for fontDesign: JournalFontDesignPreference) {
         let appearance = UITabBarAppearance()

@@ -3,6 +3,22 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
+@MainActor
+final class NotificationNavigationCoordinator: ObservableObject {
+    static let shared = NotificationNavigationCoordinator()
+
+    @Published private(set) var futureLetterID: UUID?
+
+    func openFutureLetter(id: UUID) {
+        futureLetterID = id
+    }
+
+    func consumeFutureLetter(id: UUID) {
+        guard futureLetterID == id else { return }
+        futureLetterID = nil
+    }
+}
+
 final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(
         _ application: UIApplication,
@@ -27,6 +43,12 @@ final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         print("NOTIFICATION_DIAGNOSTIC opened id=\(response.notification.request.identifier)")
+        if let rawLetterID = response.notification.request.content.userInfo["futureLetterID"] as? String,
+           let letterID = UUID(uuidString: rawLetterID) {
+            Task { @MainActor in
+                NotificationNavigationCoordinator.shared.openFutureLetter(id: letterID)
+            }
+        }
 #if DEBUG
         UserDefaults.standard.set(
             response.notification.request.identifier,
@@ -40,6 +62,7 @@ final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
 @main
 struct VoiceJournalApp: App {
     @UIApplicationDelegateAdaptor(AppNotificationDelegate.self) private var appNotificationDelegate
+    @StateObject private var notificationNavigationCoordinator = NotificationNavigationCoordinator.shared
     @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
 
     var body: some Scene {
@@ -67,6 +90,7 @@ struct VoiceJournalApp: App {
                 }
 #endif
             }
+            .environmentObject(notificationNavigationCoordinator)
             .preferredColorScheme(AppColorTheme.value(for: themeColorPreference).colorScheme)
             .tint(AppColorTheme.value(for: themeColorPreference).primaryColor)
             .background(AppThemeBackground())
@@ -109,6 +133,7 @@ private struct NotificationInspectionView: View {
                 let center = UNUserNotificationCenter.current()
                 let pending = await center.pendingNotificationRequests()
                 let delivered = await center.deliveredNotifications()
+                let settings = await center.notificationSettings()
                 let formatter = ISO8601DateFormatter()
                 let pendingIDs = pending.map { request in
                     let nextDate: Date?
@@ -127,7 +152,8 @@ private struct NotificationInspectionView: View {
                 let letterDates = letters.map { letter in
                     "\(letter.id.uuidString)@\(formatter.string(from: letter.deliveryDate))#\(letter.notificationIdentifier ?? "none")"
                 }.joined(separator: ",")
-                print("NOTIFICATION_DIAGNOSTIC inspection pending=[\(pendingIDs)] delivered=[\(deliveredIDs)] lastOpened=\(lastOpenedID) letters=[\(letterDates)] now=\(formatter.string(from: Date()))")
+                let settingsDescription = "authorization=\(settings.authorizationStatus.rawValue) alert=\(settings.alertSetting.rawValue) center=\(settings.notificationCenterSetting.rawValue) lock=\(settings.lockScreenSetting.rawValue) alertStyle=\(settings.alertStyle.rawValue) sound=\(settings.soundSetting.rawValue) summary=\(settings.scheduledDeliverySetting.rawValue)"
+                print("NOTIFICATION_DIAGNOSTIC inspection settings=[\(settingsDescription)] pending=[\(pendingIDs)] delivered=[\(deliveredIDs)] lastOpened=\(lastOpenedID) letters=[\(letterDates)] now=\(formatter.string(from: Date()))")
                 status = "Pending: \(pending.count)\nDelivered: \(delivered.count)"
             }
     }
@@ -157,7 +183,7 @@ private struct NotificationSelfTestView: View {
 
         do {
             let settings = await center.notificationSettings()
-            let settingsDescription = "authorization=\(settings.authorizationStatus.rawValue) alert=\(settings.alertSetting.rawValue) sound=\(settings.soundSetting.rawValue) summary=\(settings.scheduledDeliverySetting.rawValue) timeSensitive=\(settings.timeSensitiveSetting.rawValue)"
+            let settingsDescription = "authorization=\(settings.authorizationStatus.rawValue) alert=\(settings.alertSetting.rawValue) center=\(settings.notificationCenterSetting.rawValue) lock=\(settings.lockScreenSetting.rawValue) alertStyle=\(settings.alertStyle.rawValue) sound=\(settings.soundSetting.rawValue) summary=\(settings.scheduledDeliverySetting.rawValue) timeSensitive=\(settings.timeSensitiveSetting.rawValue)"
             print("NOTIFICATION_DIAGNOSTIC settings \(settingsDescription)")
 
             let letter = FutureLetter(
