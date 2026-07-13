@@ -2246,6 +2246,7 @@ private struct LetterToFutureMeCard: View {
 
 private struct FutureLetterComposerView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @Query(sort: \FutureLetter.deliveryDate, order: .forward) private var letters: [FutureLetter]
     @StateObject private var recorder = AudioRecorder()
@@ -2392,16 +2393,7 @@ private struct FutureLetterComposerView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            DatePicker(
-                selection: $deliveryDate,
-                in: Date()...,
-                displayedComponents: [.date, .hourAndMinute]
-            ) {
-                Image(systemName: "calendar")
-                    .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityLabel("Delivery Date & Time")
-            }
+            FutureLetterDeliveryDatePicker(date: $deliveryDate)
             .font(selectedFontDesignPreference.font(.body))
             .onChange(of: deliveryDate) { _, _ in
                 deactivateTextEditing()
@@ -2617,6 +2609,9 @@ private struct FutureLetterComposerView: View {
                 bodyText = ""
                 deliveryDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
                 message = resultMessage
+                if shouldSchedule, letter.notificationIdentifier != nil {
+                    dismiss()
+                }
             } catch {
                 message = error.localizedDescription
             }
@@ -2644,6 +2639,39 @@ private struct FutureLetterComposerView: View {
     }
 }
 
+private struct FutureLetterDeliveryDatePicker: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @Binding var date: Date
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Spacer(minLength: 0)
+
+            Image(systemName: "calendar")
+                .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+
+            DatePicker(
+                "Delivery Date & Time",
+                selection: $date,
+                in: Date()...,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .labelsHidden()
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Delivery Date & Time")
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
 private struct SwipeToDeleteFutureLetterRow: View {
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let letter: FutureLetter
@@ -2658,10 +2686,7 @@ private struct SwipeToDeleteFutureLetterRow: View {
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(role: .destructive) {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
-                    horizontalOffset = 0
-                }
-                onDelete()
+                deleteRow()
             } label: {
                 Label("Delete", systemImage: "trash")
                     .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
@@ -2674,38 +2699,41 @@ private struct SwipeToDeleteFutureLetterRow: View {
             .background(Color.red.opacity(0.88))
             .clipShape(RoundedRectangle(cornerRadius: 18))
 
-            Button {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(letter.deliveryDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(selectedFontDesignPreference.font(.caption))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(AppThemeCardBackground())
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .contentShape(RoundedRectangle(cornerRadius: 18))
+            .offset(x: displayedOffset)
+            .onTapGesture {
                 if horizontalOffset == 0 {
                     onOpen()
                 } else {
                     closeRow()
                 }
-            } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(letter.deliveryDate.formatted(date: .abbreviated, time: .shortened))
-                        .font(selectedFontDesignPreference.font(.caption))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(AppThemeCardBackground())
-                .clipShape(RoundedRectangle(cornerRadius: 18))
             }
-            .buttonStyle(.plain)
-            .offset(x: displayedOffset)
-            .simultaneousGesture(
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 12)
                     .updating($dragTranslation) { value, state, _ in
-                        state = value.translation.width
+                        state = min(0, value.translation.width)
                     }
                     .onEnded { value in
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
                             let finalOffset = horizontalOffset + value.translation.width
-                            horizontalOffset = finalOffset < -36 ? -deleteWidth : 0
+                            if finalOffset < -deleteWidth * 1.45 {
+                                deleteRow()
+                            } else {
+                                horizontalOffset = finalOffset < -36 ? -deleteWidth : 0
+                            }
                         }
                     }
             )
@@ -2719,6 +2747,13 @@ private struct SwipeToDeleteFutureLetterRow: View {
         }
     }
 
+    private func deleteRow() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+            horizontalOffset = 0
+        }
+        onDelete()
+    }
+
     private var displayedOffset: CGFloat {
         min(0, max(-deleteWidth, horizontalOffset + dragTranslation))
     }
@@ -2730,6 +2765,7 @@ private struct SwipeToDeleteFutureLetterRow: View {
 
 private struct FutureLetterDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @StateObject private var recorder = AudioRecorder()
     let letter: FutureLetter
@@ -2874,16 +2910,7 @@ private struct FutureLetterDetailView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            DatePicker(
-                selection: $deliveryDate,
-                in: Date()...,
-                displayedComponents: [.date, .hourAndMinute]
-            ) {
-                Image(systemName: "calendar")
-                    .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityLabel("Delivery Date & Time")
-            }
+            FutureLetterDeliveryDatePicker(date: $deliveryDate)
             .font(selectedFontDesignPreference.font(.body))
             .onChange(of: deliveryDate) { _, _ in
                 deactivateTextEditing()
@@ -3073,6 +3100,9 @@ private struct FutureLetterDetailView: View {
 
                 try modelContext.save()
                 message = resultMessage
+                if shouldSchedule, letter.notificationIdentifier != nil {
+                    dismiss()
+                }
             } catch {
                 message = error.localizedDescription
             }
