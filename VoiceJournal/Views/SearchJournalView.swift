@@ -1,31 +1,71 @@
 import SwiftData
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct InsightsJournalView: View {
     @Environment(\.modelContext) private var modelContext
+    @Binding var navigationPath: NavigationPath
     @AppStorage("profileDisplayName") private var profileDisplayName = ""
+    @AppStorage("insightsMemoryCardMode") private var insightsMemoryCardMode = InsightsMemoryCardMode.onThisDay.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @Query(sort: \JournalEntry.journalDate, order: .reverse) private var entries: [JournalEntry]
     @State private var exportURL: URL?
     @State private var backendStatus: BackendStatus = .checking
     @State private var themeCloudMonth = Date()
+    @State private var selectedMemoryEntry: JournalEntry?
     @State private var isEditingProfileName = false
     @State private var profileNameDraft = ""
+    @State private var renderedFontPreference = JournalFontPreference.current.rawValue
+    @State private var memoryCardSessionSeed = Int.random(in: 0..<1_000_000_000)
 
     private let calendar = Calendar.current
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    insightsHeader
-                    metricsSection
-                    themesSection
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        insightsHeader
+                        memoryCardSection
+                        metricsSection
+                        themesSection
+                    }
+                    .padding(.horizontal)
+                    .padding(.top)
+
+                    Color.clear
+                        .frame(height: 18)
                 }
-                .padding()
             }
+            .id(renderedFontPreference)
+            .background(AppThemeBackground())
             .task {
                 await refreshBackendStatus()
+            }
+            .onAppear {
+                refreshRenderedFontPreference()
+                refreshMemoryCardSelection()
+            }
+            .onChange(of: navigationPath.count) { _, count in
+                if count == 0 {
+                    refreshMemoryCardSelection()
+                }
+            }
+            .navigationDestination(for: InsightsRoute.self) { route in
+                switch route {
+                case .settings:
+                    VoiceJournalSettingsView(
+                        entries: entries,
+                        exportURL: $exportURL,
+                        backendStatus: backendStatus,
+                        makeMarkdownExport: makeMarkdownExport,
+                        deleteAllJournals: deleteAllJournals
+                    )
+                }
+            }
+            .navigationDestination(item: $selectedMemoryEntry) { entry in
+                EntryDetailView(entry: entry)
             }
             .sheet(isPresented: $isEditingProfileName) {
                 NavigationStack {
@@ -33,6 +73,8 @@ struct InsightsJournalView: View {
                         TextField("Name", text: $profileNameDraft)
                             .textInputAutocapitalization(.words)
                     }
+                    .scrollContentBackground(.hidden)
+                    .background(AppThemeBackground())
                     .navigationTitle(profileDisplayName.isEmpty ? "Add Name" : "Edit Name")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -53,6 +95,7 @@ struct InsightsJournalView: View {
                 .presentationDetents([.height(220)])
             }
         }
+        .background(AppThemeBackground())
     }
 
     private var insightsHeader: some View {
@@ -63,12 +106,15 @@ struct InsightsJournalView: View {
             } label: {
                 HStack(spacing: 8) {
                     Text(profileDisplayName.isEmpty ? "Add your name" : profileDisplayName)
-                        .font(.largeTitle.bold())
+                        .font(selectedFontDesignPreference.font(.largeTitle, weight: .bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
-                    Image(systemName: "pencil")
-                        .font(.headline.weight(.semibold))
+                    Image("icon-edit-text")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 17, height: 17)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -77,54 +123,70 @@ struct InsightsJournalView: View {
 
             Spacer()
 
-            NavigationLink {
-                VoiceJournalSettingsView(
-                    entries: entries,
-                    exportURL: $exportURL,
-                    backendStatus: backendStatus,
-                    makeMarkdownExport: makeMarkdownExport,
-                    deleteAllJournals: deleteAllJournals
-                )
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.headline)
+            NavigationLink(value: InsightsRoute.settings) {
+                Image("icon-settings")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
                     .frame(width: 42, height: 42)
-                    .background(Color.secondary.opacity(0.10))
+                    .background(AppThemeCardBackground())
                     .clipShape(Circle())
             }
             .accessibilityLabel("Settings")
         }
     }
 
+    private enum InsightsRoute: Hashable {
+        case settings
+    }
+
     private var metricsSection: some View {
         LazyVGrid(columns: metricColumns, spacing: 8) {
-            InsightMetricCard(title: "Current Streak", value: "\(currentStreak) days", systemImage: "flame")
-            InsightMetricCard(title: "This Month", value: entryCountText(entriesThisMonth), systemImage: "calendar")
+            InsightMetricCard(title: "Current Streak", value: "\(currentStreak) days", imageName: "metric-streak-flame")
+            InsightMetricCard(title: "This Month", value: entryCountText(entriesThisMonth), imageName: "metric-calendar")
+        }
+    }
+
+    private var memoryCardSection: some View {
+        InsightMemoryCard(mode: selectedMemoryCardMode, entry: memoryCardEntry) { entry in
+            selectedMemoryEntry = entry
         }
     }
 
     private var themesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Theme Cloud")
-                    .font(.headline)
+                Text("Month Recap")
+                    .font(selectedFontDesignPreference.font(.headline))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(themeCloudMonthLabel)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                Button {
+                    resetThemeCloudMonthToCurrent()
+                } label: {
+                    Text(themeCloudMonthLabel)
+                        .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(isThemeCloudMonthCurrent ? "Current month" : "Return to current month")
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             if themeCloudItems.isEmpty {
-                ContentUnavailableView("No themes yet", systemImage: "text.magnifyingglass", description: Text("Themes will appear after more journal text is saved."))
+                AppUnavailableView(
+                    title: "No themes yet",
+                    systemImage: "text.magnifyingglass",
+                    description: "Themes will appear after more journal text is saved."
+                )
             } else {
                 ThemeCloudView(themes: themeCloudItems)
             }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 22)
-        .background(Color.secondary.opacity(0.08))
+        .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .gesture(
             DragGesture(minimumDistance: 28)
@@ -135,7 +197,19 @@ struct InsightsJournalView: View {
     }
 
     private var metricColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 8), count: 2)
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedMemoryCardMode: InsightsMemoryCardMode {
+        InsightsMemoryCardMode.value(for: insightsMemoryCardMode)
+    }
+
+    private func refreshRenderedFontPreference() {
+        renderedFontPreference = JournalFontPreference.current.rawValue
     }
 
     private var entriesThisMonth: Int {
@@ -154,20 +228,97 @@ struct InsightsJournalView: View {
         JournalInsightCalculator.entriesInMonth(entries, referenceDate: themeCloudMonth, calendar: calendar)
     }
 
+    private var memoryCardEntry: JournalEntry? {
+        let candidates: [JournalEntry]
+        switch selectedMemoryCardMode {
+        case .onThisDay:
+            candidates = entries.filter { isEntryOnThisDay($0) }
+        case .randomEntry:
+            candidates = entries
+        }
+        return randomMemoryEntry(from: candidates, mode: selectedMemoryCardMode)
+    }
+
     private var themeCloudItems: [(theme: String, count: Int)] {
-        JournalInsightCalculator.themeCloud(entriesForThemeCloudMonth, limit: 12)
+        JournalInsightCalculator.themeCloud(entriesForThemeCloudMonth, limit: 10)
     }
 
     private var themeCloudMonthLabel: String {
         themeCloudMonth.formatted(.dateTime.month(.wide).year())
     }
 
+    private var isThemeCloudMonthCurrent: Bool {
+        calendar.isDate(themeCloudMonth, equalTo: Date(), toGranularity: .month)
+    }
+
     private func entryCountText(_ count: Int) -> String {
         "\(count) \(count == 1 ? "entry" : "entries")"
     }
 
+    private func isEntryOnThisDay(_ entry: JournalEntry) -> Bool {
+        let todayComponents = calendar.dateComponents([.month, .day], from: Date())
+        let entryComponents = calendar.dateComponents([.month, .day], from: entry.journalDate)
+        return todayComponents.month == entryComponents.month && todayComponents.day == entryComponents.day
+    }
+
+    private func randomMemoryEntry(from candidates: [JournalEntry], mode: InsightsMemoryCardMode) -> JournalEntry? {
+        let sortedCandidates = sortedMemoryCandidates(candidates)
+        guard !sortedCandidates.isEmpty else { return nil }
+        return sortedCandidates[memorySeed(for: mode) % sortedCandidates.count]
+    }
+
+    private func refreshMemoryCardSelection() {
+        let candidates: [JournalEntry]
+        switch selectedMemoryCardMode {
+        case .onThisDay:
+            candidates = sortedMemoryCandidates(entries.filter { isEntryOnThisDay($0) })
+        case .randomEntry:
+            candidates = sortedMemoryCandidates(entries)
+        }
+        guard !candidates.isEmpty else { return }
+
+        let currentEntryID = randomMemoryEntry(from: candidates, mode: selectedMemoryCardMode)?.id
+        var nextSeed = Int.random(in: 0..<1_000_000_000)
+
+        if candidates.count > 1 {
+            for _ in 0..<8 {
+                let nextIndex = (nextSeed + memoryModeOffset(for: selectedMemoryCardMode)) % candidates.count
+                if candidates[nextIndex].id != currentEntryID {
+                    break
+                }
+                nextSeed = Int.random(in: 0..<1_000_000_000)
+            }
+        }
+
+        memoryCardSessionSeed = nextSeed
+    }
+
+    private func sortedMemoryCandidates(_ candidates: [JournalEntry]) -> [JournalEntry] {
+        candidates.sorted { first, second in
+            if first.journalDate == second.journalDate {
+                return first.id.uuidString < second.id.uuidString
+            }
+            return first.journalDate < second.journalDate
+        }
+    }
+
+    private func memorySeed(for mode: InsightsMemoryCardMode) -> Int {
+        memoryCardSessionSeed + memoryModeOffset(for: mode)
+    }
+
+    private func memoryModeOffset(for mode: InsightsMemoryCardMode) -> Int {
+        mode == .onThisDay ? 17 : 53
+    }
+
     private func moveThemeCloudMonth(by value: Int) {
         themeCloudMonth = calendar.date(byAdding: .month, value: value, to: themeCloudMonth) ?? themeCloudMonth
+    }
+
+    private func resetThemeCloudMonthToCurrent() {
+        guard !isThemeCloudMonthCurrent else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            themeCloudMonth = Date()
+        }
     }
 
     private func handleThemeCloudSwipe(_ horizontalTranslation: CGFloat) {
@@ -182,7 +333,7 @@ struct InsightsJournalView: View {
         let sortedEntries = entries.sorted { $0.journalDate > $1.journalDate }
         let markdown = MarkdownJournalExporter.makeMarkdown(entries: sortedEntries)
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Voice Journal Export")
+            .appendingPathComponent("Flara Day Export")
             .appendingPathExtension("md")
 
         do {
@@ -235,15 +386,17 @@ private struct VoiceJournalSettingsView: View {
     @AppStorage("faceIDLockEnabled") private var faceIDLockEnabled = false
     @AppStorage("passwordLockEnabled") private var passwordLockEnabled = false
     @AppStorage("appLockPassword") private var appLockPassword = ""
-    @AppStorage("appThemePreference") private var appThemePreference = AppThemePreference.system.rawValue
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
     @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("insightsMemoryCardMode") private var insightsMemoryCardMode = InsightsMemoryCardMode.onThisDay.rawValue
     @AppStorage("showLivePreview") private var showLivePreview = true
 
     @State private var requestedFaceIDLock = false
     @State private var requestedPasswordLock = false
     @State private var isShowingDeleteAccountConfirmation = false
     @State private var isShowingDeleteJournalsConfirmation = false
+    @State private var isShowingExportSheet = false
     @State private var isShowingImportPicker = false
     @State private var isShowingPasswordSetup = false
     @State private var passwordDraft = ""
@@ -253,115 +406,146 @@ private struct VoiceJournalSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Theme Mode", selection: $appThemePreference) {
-                    ForEach(AppThemePreference.allCases) { preference in
-                        Text(preference.displayName).tag(preference.rawValue)
-                    }
-                }
+                ThemePicker(selection: $themeColorPreference)
+                    .listRowBackground(AppThemeCardBackground())
 
-                Picker("Font Size", selection: $journalFontPreference) {
-                    ForEach(JournalFontPreference.allCases) { preference in
-                        Text(preference.displayName).tag(preference.rawValue)
-                    }
-                }
+                FontDesignPicker(selection: $journalFontDesignPreference)
+                    .listRowBackground(AppThemeCardBackground())
 
-                Picker("Font Style", selection: $journalFontDesignPreference) {
-                    ForEach(JournalFontDesignPreference.allCases) { preference in
-                        Text(preference.displayName).tag(preference.rawValue)
-                    }
-                }
+                FontSizePicker(selection: $journalFontPreference)
+                    .listRowBackground(AppThemeCardBackground())
+
+                MemoryCardModePicker(selection: $insightsMemoryCardMode)
+                    .listRowBackground(AppThemeCardBackground())
 
                 Toggle(isOn: $showLivePreview) {
-                    Label("Live Preview While Recording", systemImage: "waveform")
+                    SettingsRowLabel(title: "Live Preview While Recording", imageName: "icon-live-preview")
                 }
+                .listRowBackground(AppThemeCardBackground())
             } header: {
                 Text("Appearance")
+                    .font(selectedFontDesignPreference.unscaledFont(.subheadline, weight: .semibold))
             }
+            .listRowBackground(AppThemeCardBackground())
+
+            Section {
+                NavigationLink {
+                    FeatureRequestBoardView()
+                } label: {
+                    SettingsRowLabel(title: "Request / Vote on Features", systemImageName: "triangle.fill")
+                }
+                .listRowBackground(AppThemeCardBackground())
+
+                NavigationLink {
+                    VersionHistoryView()
+                } label: {
+                    SettingsRowLabel(title: "Version History", systemImageName: "clock")
+                }
+                .listRowBackground(AppThemeCardBackground())
+            } header: {
+                Text("Support")
+                    .font(selectedFontDesignPreference.unscaledFont(.subheadline, weight: .semibold))
+            }
+            .listRowBackground(AppThemeCardBackground())
 
             Section {
                 Toggle(isOn: $requestedFaceIDLock) {
-                    Label("Face ID Lock", systemImage: "faceid")
+                    SettingsRowLabel(title: "Face ID Lock", imageName: "icon-face-id")
                 }
+                .listRowBackground(AppThemeCardBackground())
 
                 Toggle(isOn: $requestedPasswordLock) {
-                    Label("Password Lock", systemImage: "lock.rectangle")
+                    SettingsRowLabel(title: "Password Lock", imageName: "icon-password-lock")
                 }
+                .listRowBackground(AppThemeCardBackground())
 
                 if passwordLockEnabled {
                     Button {
                         passwordDraft = ""
                         isShowingPasswordSetup = true
                     } label: {
-                        Label("Change Password", systemImage: "number")
+                        SettingsRowLabel(title: "Change Password", imageName: "icon-change-password")
                     }
+                    .listRowBackground(AppThemeCardBackground())
                 }
 
                 if let lockMessage {
                     Text(lockMessage)
-                        .font(.caption)
+                        .font(selectedFontPreference.font(.caption, design: selectedFontDesignPreference))
                         .foregroundStyle(.secondary)
+                        .listRowBackground(AppThemeCardBackground())
                 }
-            } header: {
-                Text("Privacy & Security")
-            }
-
-            Section {
-                if let exportURL {
-                    ShareLink(item: exportURL) {
-                        Label("Share Markdown Export", systemImage: "square.and.arrow.up")
-                    }
-                } else {
-                    Button {
-                        exportURL = makeMarkdownExport()
-                    } label: {
-                        Label("Export Journals", systemImage: "doc.text")
-                    }
-                    .disabled(entries.isEmpty)
+                Button {
+                    exportURL = makeMarkdownExport()
+                    isShowingExportSheet = exportURL != nil
+                } label: {
+                    SettingsRowLabel(title: "Export Journals", imageName: "icon-export-journals", foregroundColor: settingsActionTextColor, iconColor: Color.accentColor)
                 }
+                .disabled(entries.isEmpty)
+                .listRowBackground(AppThemeCardBackground())
 
                 Button {
                     isShowingImportPicker = true
                 } label: {
-                    Label("Import Journals", systemImage: "square.and.arrow.down")
+                    SettingsRowLabel(title: "Import Journals", imageName: "icon-import-journals", foregroundColor: settingsActionTextColor, iconColor: Color.accentColor)
                 }
+                .listRowBackground(AppThemeCardBackground())
 
                 Button(role: .destructive) {
                     isShowingDeleteJournalsConfirmation = true
                 } label: {
-                    Label("Delete All Journals", systemImage: "trash")
+                    SettingsRowLabel(title: "Delete All Journals", imageName: "icon-trash", foregroundColor: .red)
                 }
                 .disabled(entries.isEmpty)
+                .listRowBackground(AppThemeCardBackground())
 
                 if let importMessage {
                     Text(importMessage)
-                        .font(.caption)
+                        .font(selectedFontPreference.font(.caption, design: selectedFontDesignPreference))
                         .foregroundStyle(.secondary)
+                        .listRowBackground(AppThemeCardBackground())
                 }
             } header: {
-                Text("Privacy & Data")
+                Text("Privacy")
+                    .font(selectedFontDesignPreference.unscaledFont(.subheadline, weight: .semibold))
             }
+            .listRowBackground(AppThemeCardBackground())
 
             Section {
                 HStack {
-                    Label("Backend", systemImage: "network")
+                    SettingsRowLabel(title: "Backend", imageName: "icon-backend")
                     Spacer()
                     Text(backendStatus.displayText)
                         .foregroundStyle(backendStatus.color)
                 }
+                .listRowBackground(AppThemeCardBackground())
             } header: {
                 Text("Connection")
+                    .font(selectedFontDesignPreference.unscaledFont(.subheadline, weight: .semibold))
             }
+            .listRowBackground(AppThemeCardBackground())
 
             Section {
                 Button(role: .destructive) {
                     isShowingDeleteAccountConfirmation = true
                 } label: {
-                    Label("Delete Account", systemImage: "person.crop.circle.badge.xmark")
+                    SettingsRowLabel(title: "Delete Account", imageName: "icon-delete-account", foregroundColor: .red)
                 }
+                .listRowBackground(AppThemeCardBackground())
             }
+            .listRowBackground(AppThemeCardBackground())
         }
+        .scrollContentBackground(.hidden)
+        .background(AppThemeBackground())
+        .tint(selectedTheme.primaryColor)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Settings")
+                    .font(selectedFontPreference.font(.headline, design: selectedFontDesignPreference, weight: .semibold))
+            }
+        }
         .onAppear {
             requestedFaceIDLock = faceIDLockEnabled
             requestedPasswordLock = passwordLockEnabled
@@ -390,13 +574,19 @@ private struct VoiceJournalSettingsView: View {
                 isShowingPasswordSetup = false
             }
         }
+        .sheet(isPresented: $isShowingExportSheet) {
+            if let exportURL {
+                ActivityView(activityItems: [exportURL])
+                    .presentationDetents([.medium, .large])
+            }
+        }
         .confirmationDialog("Delete all journals?", isPresented: $isShowingDeleteJournalsConfirmation, titleVisibility: .visible) {
             Button("Delete All Journals", role: .destructive) {
                 deleteAllJournals()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This only deletes journals stored in Voice Journal. This cannot be undone.")
+            Text("This only deletes journals stored in Flara Day. This cannot be undone.")
         }
         .confirmationDialog("Delete account?", isPresented: $isShowingDeleteAccountConfirmation, titleVisibility: .visible) {
             Button("Delete Account and Journals", role: .destructive) {
@@ -404,7 +594,7 @@ private struct VoiceJournalSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This clears the local profile and deletes all journals stored in Voice Journal. This cannot be undone.")
+            Text("This clears the local profile and deletes all journals stored in Flara Day. This cannot be undone.")
         }
     }
 
@@ -413,7 +603,7 @@ private struct VoiceJournalSettingsView: View {
 
         if isEnabled {
             Task {
-                let result = await AppLockAuthenticator.authenticate(reason: "Use Face ID to lock Voice Journal.")
+                let result = await AppLockAuthenticator.authenticate(reason: "Use Face ID to lock Flara Day.")
                 await MainActor.run {
                     if result.isSuccess {
                         faceIDLockEnabled = true
@@ -493,9 +683,423 @@ private struct VoiceJournalSettingsView: View {
         appLockPassword = ""
         deleteAllJournals()
     }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var settingsActionTextColor: Color {
+        selectedTheme.colorScheme == .dark ? .white : .black
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedFontPreference: JournalFontPreference {
+        JournalFontPreference.value(for: journalFontPreference)
+    }
+}
+
+private struct FeatureRequestBoardView: View {
+    @AppStorage("featureRequestBoardItemsV2") private var storedItemsData = ""
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+    @State private var items = FeatureRequestItem.defaultItems
+    @State private var draftTitle = ""
+    @State private var draftDetails = ""
+    @State private var isShowingRequestSheet = false
+    @State private var selectedFeatureRequest: FeatureRequestItem?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Vote on what should come next.")
+                    .font(selectedFontDesignPreference.font(.subheadline))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+
+                ForEach(items.sorted(by: sortFeatureRequests)) { item in
+                    FeatureRequestCardView(
+                        item: item,
+                        theme: selectedTheme,
+                        fontDesign: selectedFontDesignPreference,
+                        open: {
+                            selectedFeatureRequest = item
+                        }
+                    ) {
+                        vote(for: item)
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(AppThemeBackground())
+        .tint(selectedTheme.primaryColor)
+        .navigationTitle("Feature Requests")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Feature Requests")
+                    .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    draftTitle = ""
+                    draftDetails = ""
+                    isShowingRequestSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Request feature")
+            }
+        }
+        .sheet(isPresented: $isShowingRequestSheet) {
+            requestSheet
+        }
+        .navigationDestination(item: $selectedFeatureRequest) { item in
+            FeatureRequestDetailView(
+                item: item,
+                theme: selectedTheme,
+                fontDesign: selectedFontDesignPreference
+            ) {
+                vote(for: item)
+                selectedFeatureRequest = items.first(where: { $0.id == item.id })
+            }
+        }
+        .onAppear(perform: loadItems)
+    }
+
+    private var requestSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Feature title", text: $draftTitle)
+                        .textInputAutocapitalization(.sentences)
+                        .listRowBackground(AppThemeCardBackground())
+
+                    TextField("Why would this help?", text: $draftDetails, axis: .vertical)
+                        .lineLimit(3...6)
+                        .textInputAutocapitalization(.sentences)
+                        .listRowBackground(AppThemeCardBackground())
+                }
+                .listRowBackground(AppThemeCardBackground())
+                .font(selectedFontDesignPreference.font(.body))
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppThemeBackground())
+            .tint(selectedTheme.primaryColor)
+            .navigationTitle("Request Feature")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Request Feature")
+                        .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+                }
+
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        isShowingRequestSheet = false
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addRequest()
+                    }
+                    .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private func loadItems() {
+        guard
+            let data = storedItemsData.data(using: .utf8),
+            let decodedItems = try? JSONDecoder().decode([FeatureRequestItem].self, from: data),
+            !decodedItems.isEmpty
+        else {
+            items = FeatureRequestItem.defaultItems
+            return
+        }
+
+        items = decodedItems
+    }
+
+    private func addRequest() {
+        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+
+        let trimmedDetails = draftDetails.trimmingCharacters(in: .whitespacesAndNewlines)
+        items.insert(FeatureRequestItem(title: trimmedTitle, details: trimmedDetails, voteCount: 1, status: "Requested"), at: 0)
+        draftTitle = ""
+        draftDetails = ""
+        isShowingRequestSheet = false
+        persistItems()
+    }
+
+    private func vote(for item: FeatureRequestItem) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        items[index].voteCount += 1
+        persistItems()
+    }
+
+    private func persistItems() {
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        storedItemsData = String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private func sortFeatureRequests(_ lhs: FeatureRequestItem, _ rhs: FeatureRequestItem) -> Bool {
+        if lhs.voteCount == rhs.voteCount {
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+
+        return lhs.voteCount > rhs.voteCount
+    }
+}
+
+private struct FeatureRequestItem: Identifiable, Codable, Equatable, Hashable {
+    let id: UUID
+    var title: String
+    var details: String
+    var voteCount: Int
+    var status: String
+
+    init(id: UUID = UUID(), title: String, details: String, voteCount: Int, status: String) {
+        self.id = id
+        self.title = title
+        self.details = details
+        self.voteCount = voteCount
+        self.status = status
+    }
+
+    static let defaultItems = [
+        FeatureRequestItem(title: "Cloud sync across devices", details: "Keep journals available on iPhone and iPad.", voteCount: 12, status: "Planned"),
+        FeatureRequestItem(title: "More export formats", details: "Export entries as PDF, DOCX, or clean text bundles.", voteCount: 8, status: "Requested"),
+        FeatureRequestItem(title: "Custom monthly insight prompts", details: "Let users choose the reflection questions used for recaps.", voteCount: 5, status: "Under Review")
+    ]
+}
+
+private struct FeatureRequestCardView: View {
+    let item: FeatureRequestItem
+    let theme: AppColorTheme
+    let fontDesign: JournalFontDesignPreference
+    let open: () -> Void
+    let vote: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 13) {
+            Button(action: vote) {
+                VStack(spacing: 4) {
+                    Image(systemName: "chevron.up")
+                        .font(.caption.weight(.bold))
+                    Text("\(item.voteCount)")
+                        .font(fontDesign.font(.callout, weight: .bold))
+                }
+                .foregroundStyle(theme.primaryColor)
+                .frame(width: 52, height: 58)
+                .background(theme.primaryColor.opacity(0.13))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Vote for \(item.title)")
+
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(item.title)
+                            .font(fontDesign.font(.headline, weight: .semibold))
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text(item.status)
+                            .font(fontDesign.font(.caption, weight: .semibold))
+                            .foregroundStyle(theme.primaryColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(theme.primaryColor.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    if !item.details.isEmpty {
+                        Text(item.details)
+                            .font(fontDesign.font(.subheadline))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(AppThemeCardBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+private struct FeatureRequestDetailView: View {
+    let item: FeatureRequestItem
+    let theme: AppColorTheme
+    let fontDesign: JournalFontDesignPreference
+    let vote: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(item.title)
+                        .font(fontDesign.font(.title2, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(item.status)
+                        .font(fontDesign.font(.caption, weight: .semibold))
+                        .foregroundStyle(theme.primaryColor)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(theme.primaryColor.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                Button(action: vote) {
+                    Label("\(item.voteCount) votes", systemImage: "chevron.up")
+                        .font(fontDesign.font(.callout, weight: .semibold))
+                        .foregroundStyle(theme.primaryColor)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(theme.primaryColor.opacity(0.13))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Text(item.details.isEmpty ? "No description yet." : item.details)
+                    .font(fontDesign.font(.body))
+                    .foregroundStyle(item.details.isEmpty ? .secondary : .primary)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding()
+        }
+        .background(AppThemeBackground())
+        .navigationTitle("Feature Detail")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Feature Detail")
+                    .font(fontDesign.font(.headline, weight: .semibold))
+            }
+        }
+    }
+}
+
+private struct VersionHistoryView: View {
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    SettingsRowLabel(title: "Installed Version", imageName: "metric-calendar")
+                    Spacer()
+                    Text(versionDisplayText)
+                        .font(selectedFontDesignPreference.font(.body))
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Current")
+                    .font(selectedFontDesignPreference.unscaledFont(.caption, weight: .semibold))
+            }
+            .listRowBackground(AppThemeCardBackground())
+
+            Section {
+                VersionHistoryEntryView(
+                    version: versionDisplayText,
+                    changes: [
+                        "Chunked live preview with overlap",
+                        "Calendar and insights navigation reset",
+                        "Tinted theme surfaces and support settings"
+                    ]
+                )
+            } header: {
+                Text("History")
+                    .font(selectedFontDesignPreference.unscaledFont(.caption, weight: .semibold))
+            }
+            .listRowBackground(AppThemeCardBackground())
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppThemeBackground())
+        .tint(selectedTheme.primaryColor)
+        .navigationTitle("Version History")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Version History")
+                    .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+            }
+        }
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var versionDisplayText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
+    }
+}
+
+private struct VersionHistoryEntryView: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    let version: String
+    let changes: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(version)
+                .font(selectedFontDesignPreference.font(.headline))
+
+            ForEach(changes, id: \.self) { change in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("-")
+                    Text(change)
+                }
+                .font(selectedFontDesignPreference.font(.subheadline))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
 }
 
 private struct PasswordSetupView: View {
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @Binding var password: String
     let onSave: () -> Void
     let onCancel: () -> Void
@@ -507,12 +1111,15 @@ private struct PasswordSetupView: View {
                 Spacer(minLength: 12)
 
                 VStack(spacing: 14) {
-                    Image(systemName: "lock.rectangle")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                    Image("icon-change-password")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 38, height: 38)
+                        .foregroundColor(selectedTheme.primaryColor)
 
                     Text("Create a 6-digit password")
-                        .font(.title3.bold())
+                        .font(selectedFontDesignPreference.font(.title3, weight: .bold))
 
                     NumericPasswordDots(count: password.count, length: 6)
                         .padding(.top, 6)
@@ -528,17 +1135,25 @@ private struct PasswordSetupView: View {
                     }
                 }
 
-                Text("Use six numbers to unlock Voice Journal without Face ID.")
-                    .font(.caption)
+                Text("Use six numbers to unlock Flara Day without Face ID.")
+                    .font(selectedFontDesignPreference.font(.caption))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AppThemeBackground())
+            .tint(selectedTheme.primaryColor)
             .navigationTitle("Set Password")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Set Password")
+                        .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+                }
+
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
@@ -556,42 +1171,682 @@ private struct PasswordSetupView: View {
         didSubmit = true
         onSave()
     }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
 }
 
-enum AppThemePreference: String, CaseIterable, Identifiable {
-    case system
-    case light
-    case dark
+enum AppColorTheme: String, CaseIterable, Identifiable {
+    case h1
+    case j1
+    case j2
+    case j4
+    case r1
+    case r2
+    case r3
+    case l2
+    case y4
+    case o1
+    case o3
+    case o4
+
+    var id: String { rawValue }
+
+    static let lightThemes: [AppColorTheme] = [.r1, .r2, .r3, .l2, .h1, .j1, .j4]
+    static let nightThemes: [AppColorTheme] = [.y4, .o1, .o3, .o4]
+
+    var displayName: String {
+        switch self {
+        case .h1:
+            "H1 · Seafoam + Soft Butter"
+        case .j1:
+            "J1 · Lilac + Soft Butter"
+        case .j2:
+            "J2 · Lilac + Peach"
+        case .j4:
+            "J4 · Sage + Soft Butter"
+        case .r1:
+            "R1 · Dusty Rose"
+        case .r2:
+            "R2 · Soft Coral"
+        case .r3:
+            "R3 · Muted Berry"
+        case .l2:
+            "L2 · Warm Honey"
+        case .y4:
+            "Y4 · Dark Burnt Honey"
+        case .o1:
+            "O1 · Black + Balanced Periwinkle"
+        case .o3:
+            "O3 · Black Forest + Balanced Teal"
+        case .o4:
+            "O4 · Black Plum + Balanced Rose"
+        }
+    }
+
+    var shortName: String {
+        String(displayName.prefix { $0 != "·" }).trimmingCharacters(in: .whitespaces)
+    }
+
+    var primaryColor: Color {
+        Color(hex: primaryHex)
+    }
+
+    var backgroundColor: Color {
+        Color(hex: backgroundHex)
+    }
+
+    var cardColor: Color {
+        Color(hex: cardHex)
+    }
+
+    var colorScheme: ColorScheme {
+        AppColorTheme.nightThemes.contains(self) ? .dark : .light
+    }
+
+    var swatchHexes: [String] {
+        switch self {
+        case .h1:
+            ["#6FC6B8", "#F6E7A9"]
+        case .j1:
+            ["#A99BEA", "#F6E7A9"]
+        case .j2:
+            ["#A99BEA", "#F0B28F"]
+        case .j4:
+            ["#91B99D", "#F6E7A9"]
+        case .r1:
+            ["#D994A3"]
+        case .r2:
+            ["#E08E76"]
+        case .r3:
+            ["#C66A86"]
+        case .l2:
+            ["#E8C766"]
+        case .y4:
+            ["#D09A45", "#05060A"]
+        case .o1:
+            ["#505BB8", "#05060A"]
+        case .o3:
+            ["#167D70", "#05060A"]
+        case .o4:
+            ["#A64463", "#05060A"]
+        }
+    }
+
+    private var primaryHex: String {
+        swatchHexes[0]
+    }
+
+    private var backgroundHex: String {
+        switch self {
+        case .h1:
+            "#E0F1EC"
+        case .j1, .j2:
+            "#ECE3F8"
+        case .j4:
+            "#E3F1E7"
+        case .r1:
+            "#F3DFE6"
+        case .r2:
+            "#F4E1D9"
+        case .r3:
+            "#F2DBE5"
+        case .l2:
+            "#F2E4BD"
+        case .y4:
+            "#080808"
+        case .o1:
+            "#080A17"
+        case .o3:
+            "#07120F"
+        case .o4:
+            "#100A12"
+        }
+    }
+
+    private var cardHex: String {
+        switch self {
+        case .h1:
+            "#E8F6F3"
+        case .j1:
+            "#F2ECFC"
+        case .j2:
+            "#F4ECFA"
+        case .j4:
+            "#EBF6EE"
+        case .r1:
+            "#F9E7ED"
+        case .r2:
+            "#FAE9E2"
+        case .r3:
+            "#F7E4EC"
+        case .l2:
+            "#F9EED0"
+        case .y4:
+            "#1C150D"
+        case .o1:
+            "#13162E"
+        case .o3:
+            "#0B2622"
+        case .o4:
+            "#27141E"
+        }
+    }
+
+    static func value(for rawValue: String) -> AppColorTheme {
+        AppColorTheme(rawValue: rawValue) ?? .h1
+    }
+}
+
+struct AppThemeBackground: View {
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+
+    var body: some View {
+        AppColorTheme.value(for: themeColorPreference)
+            .backgroundColor
+            .ignoresSafeArea()
+    }
+}
+
+struct AppThemeCardBackground: View {
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+
+    var body: some View {
+        AppColorTheme.value(for: themeColorPreference)
+            .cardColor
+    }
+}
+
+struct AppUnavailableView: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    let title: String
+    let systemImage: String
+    let description: String
+    var size: AppUnavailableViewSize = .standard
+
+    var body: some View {
+        VStack(spacing: size.spacing) {
+            Image(systemName: systemImage)
+                .font(iconFont)
+                .foregroundStyle(.secondary)
+
+            Text(title)
+                .font(titleFont)
+                .multilineTextAlignment(.center)
+
+            Text(description)
+                .font(descriptionFont)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, size.verticalPadding)
+        .padding(.horizontal, 18)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var iconFont: Font {
+        switch size {
+        case .standard:
+            selectedFontDesignPreference.unscaledFont(.title2, weight: .semibold)
+        case .prominent:
+            selectedFontDesignPreference.unscaledFont(.largeTitle, weight: .semibold)
+        }
+    }
+
+    private var titleFont: Font {
+        switch size {
+        case .standard:
+            selectedFontDesignPreference.unscaledFont(.headline, weight: .semibold)
+        case .prominent:
+            selectedFontDesignPreference.unscaledFont(.title2, weight: .semibold)
+        }
+    }
+
+    private var descriptionFont: Font {
+        switch size {
+        case .standard:
+            selectedFontDesignPreference.unscaledFont(.subheadline)
+        case .prominent:
+            selectedFontDesignPreference.unscaledFont(.body)
+        }
+    }
+}
+
+enum AppUnavailableViewSize {
+    case standard
+    case prominent
+
+    var spacing: CGFloat {
+        switch self {
+        case .standard:
+            10
+        case .prominent:
+            12
+        }
+    }
+
+    var verticalPadding: CGFloat {
+        switch self {
+        case .standard:
+            28
+        case .prominent:
+            34
+        }
+    }
+}
+
+enum InsightsMemoryCardMode: String, CaseIterable, Identifiable {
+    case onThisDay
+    case randomEntry
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .system:
-            "System"
-        case .light:
-            "Light"
-        case .dark:
-            "Dark"
+        case .onThisDay:
+            "On This Day"
+        case .randomEntry:
+            "Random Entry"
         }
     }
 
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system:
-            nil
-        case .light:
-            .light
-        case .dark:
-            .dark
+    static func value(for rawValue: String) -> InsightsMemoryCardMode {
+        InsightsMemoryCardMode(rawValue: rawValue) ?? .onThisDay
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let trimmedHex = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let value = Int(trimmedHex, radix: 16) ?? 0
+        let red = Double((value >> 16) & 0xFF) / 255
+        let green = Double((value >> 8) & 0xFF) / 255
+        let blue = Double(value & 0xFF) / 255
+
+        self.init(red: red, green: green, blue: blue)
+    }
+}
+
+private struct ThemePicker: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+    @Binding var selection: String
+    @State private var isExpanded = false
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: selection)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 18) {
+                themeRow(title: "Light", themes: AppColorTheme.lightThemes)
+                themeRow(title: "Dark", themes: AppColorTheme.nightThemes)
+            }
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+        } label: {
+            HStack {
+                SettingsRowLabel(title: "Theme", imageName: "icon-theme-mode")
+                Spacer()
+                Circle()
+                    .fill(selectedTheme.primaryColor)
+                    .frame(width: 18, height: 18)
+                    .overlay {
+                        Circle()
+                            .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    }
+            }
+        }
+        .accessibilityLabel("Theme")
+        .accessibilityValue(selectedTheme.displayName)
+    }
+
+    private func themeRow(title: String, themes: [AppColorTheme]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(selectedFontPreference.font(.caption, design: selectedFontDesignPreference, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(themes) { theme in
+                        Button {
+                            selection = theme.rawValue
+                        } label: {
+                            ThemeSelectionSwatch(
+                                theme: theme,
+                                isSelected: selectedTheme == theme
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(theme.displayName)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
         }
     }
 
-    static func value(for rawValue: String) -> AppThemePreference {
-        if rawValue == "classic" {
-            return .light
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedFontPreference: JournalFontPreference {
+        JournalFontPreference.value(for: journalFontPreference)
+    }
+}
+
+private struct FontDesignPicker: View {
+    @Binding var selection: String
+    @State private var isExpanded = false
+
+    private var selectedPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: selection)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(JournalFontDesignPreference.allCases) { preference in
+                        AppearanceChoiceButton(
+                            title: preference.displayName,
+                            isSelected: selectedPreference == preference,
+                            font: .system(.callout, design: preference.fontDesign, weight: .semibold)
+                        ) {
+                            selection = preference.rawValue
+                        }
+                    }
+                }
+                .padding(.vertical, 10)
+            }
+        } label: {
+            HStack {
+                SettingsRowLabel(title: "Font", imageName: "icon-font-style")
+                Spacer()
+                    Text(selectedPreference.displayName)
+                    .font(selectedFontPreference.font(.body, design: selectedPreference))
+                    .foregroundStyle(.secondary)
+            }
         }
-        return AppThemePreference(rawValue: rawValue) ?? .system
+        .accessibilityLabel("Font")
+        .accessibilityValue(selectedPreference.displayName)
+    }
+
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+
+    private var selectedFontPreference: JournalFontPreference {
+        JournalFontPreference.value(for: journalFontPreference)
+    }
+}
+
+private struct FontSizePicker: View {
+    @Binding var selection: String
+    @State private var isExpanded = false
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+
+    private var selectedPreference: JournalFontPreference {
+        JournalFontPreference.value(for: selection)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(JournalFontPreference.allCases) { preference in
+                        AppearanceChoiceButton(
+                            title: preference.displayName,
+                            isSelected: selectedPreference == preference,
+                            font: choiceFont(for: preference)
+                        ) {
+                            select(preference)
+                        }
+                    }
+                }
+                .padding(.vertical, 10)
+            }
+        } label: {
+            HStack {
+                SettingsRowLabel(title: "Font Size", imageName: "icon-font-size")
+                Spacer()
+                Text(selectedPreference.displayName)
+                    .font(selectedPreference.font(.body, design: selectedFontDesignPreference))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityLabel("Font Size")
+        .accessibilityValue(selectedPreference.displayName)
+    }
+
+    private func choiceFont(for preference: JournalFontPreference) -> Font {
+        switch preference {
+        case .compact:
+            preference.font(.caption, design: selectedFontDesignPreference, weight: .semibold)
+        case .standard:
+            preference.font(.callout, design: selectedFontDesignPreference, weight: .semibold)
+        case .spacious:
+            preference.font(.title3, design: selectedFontDesignPreference, weight: .semibold)
+        }
+    }
+
+    private func select(_ preference: JournalFontPreference) {
+        JournalFontPreference.setCurrent(preference)
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            selection = preference.rawValue
+        }
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct MemoryCardModePicker: View {
+    @Binding var selection: String
+    @State private var isExpanded = false
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+
+    private var selectedMode: InsightsMemoryCardMode {
+        InsightsMemoryCardMode.value(for: selection)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(InsightsMemoryCardMode.allCases) { mode in
+                        AppearanceChoiceButton(
+                            title: mode.displayName,
+                            isSelected: selectedMode == mode,
+                            font: selectedFontPreference.font(.callout, design: selectedFontDesignPreference, weight: .semibold)
+                        ) {
+                            selection = mode.rawValue
+                        }
+                    }
+                }
+                .padding(.vertical, 10)
+            }
+        } label: {
+            HStack {
+                SettingsRowLabel(title: "Memory Card", systemImageName: "sparkles")
+                Spacer()
+                Text(selectedMode.displayName)
+                    .font(selectedFontPreference.font(.body, design: selectedFontDesignPreference))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityLabel("Memory Card")
+        .accessibilityValue(selectedMode.displayName)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedFontPreference: JournalFontPreference {
+        JournalFontPreference.value(for: journalFontPreference)
+    }
+}
+
+private struct AppearanceChoiceButton: View {
+    let title: String
+    let isSelected: Bool
+    let font: Font
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(font)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.06))
+                .clipShape(Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct SettingsRowLabel: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+    let title: String
+    let imageName: String?
+    let systemImageName: String?
+    var foregroundColor: Color?
+    var iconColor: Color?
+
+    init(title: String, imageName: String, foregroundColor: Color? = nil, iconColor: Color? = nil) {
+        self.title = title
+        self.imageName = imageName
+        self.systemImageName = nil
+        self.foregroundColor = foregroundColor
+        self.iconColor = iconColor
+    }
+
+    init(title: String, systemImageName: String, foregroundColor: Color? = nil, iconColor: Color? = nil) {
+        self.title = title
+        self.imageName = nil
+        self.systemImageName = systemImageName
+        self.foregroundColor = foregroundColor
+        self.iconColor = iconColor
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let systemImageName {
+                SettingsSystemIcon(systemImageName, color: iconColor ?? foregroundColor ?? Color.accentColor)
+            } else if let imageName {
+                SettingsIcon(imageName, color: iconColor ?? foregroundColor ?? Color.accentColor)
+            }
+            Text(title)
+                .font(selectedFontPreference.font(.body, design: selectedFontDesignPreference))
+                .foregroundStyle(foregroundColor ?? Color.primary)
+        }
+    }
+
+    private var selectedFontPreference: JournalFontPreference {
+        JournalFontPreference.value(for: journalFontPreference)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct SettingsSystemIcon: View {
+    let systemImageName: String
+    let color: Color
+
+    init(_ systemImageName: String, color: Color = Color.accentColor) {
+        self.systemImageName = systemImageName
+        self.color = color
+    }
+
+    var body: some View {
+        Image(systemName: systemImageName)
+            .font(.system(size: 19, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 28, alignment: .center)
+    }
+}
+
+private struct SettingsIcon: View {
+    let imageName: String
+    let color: Color
+
+    init(_ imageName: String, color: Color = Color.accentColor) {
+        self.imageName = imageName
+        self.color = color
+    }
+
+    var body: some View {
+        Image(imageName)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 21, height: 21)
+            .foregroundStyle(color)
+            .frame(width: 28, alignment: .center)
+    }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private struct ThemeSelectionSwatch: View {
+    let theme: AppColorTheme
+    let isSelected: Bool
+
+    var body: some View {
+        Circle()
+            .fill(theme.primaryColor)
+            .frame(width: 30, height: 30)
+            .overlay {
+                Circle()
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+            }
+            .padding(2)
+            .overlay {
+                Circle()
+                    .stroke(isSelected ? theme.primaryColor : Color.clear, lineWidth: 2)
+            }
+            .overlay {
+                Circle()
+                    .stroke(isSelected ? Color.white.opacity(0.82) : Color.clear, lineWidth: 1)
+                    .padding(2)
+            }
+            .frame(width: 42, height: 42)
     }
 }
 
@@ -616,22 +1871,95 @@ enum JournalFontPreference: String, CaseIterable, Identifiable {
     func editorFont(design: JournalFontDesignPreference) -> Font {
         switch self {
         case .compact:
-            .system(.callout, design: design.fontDesign)
+            font(.callout, design: design)
         case .standard:
-            .system(.body, design: design.fontDesign)
+            font(.body, design: design)
         case .spacious:
-            .system(.title3, design: design.fontDesign)
+            font(.title3, design: design)
         }
     }
 
     func rowBodyFont(design: JournalFontDesignPreference) -> Font {
         switch self {
         case .compact:
-            .system(.caption, design: design.fontDesign)
+            font(.caption, design: design)
         case .standard:
-            .system(.subheadline, design: design.fontDesign)
+            font(.subheadline, design: design)
         case .spacious:
-            .system(.body, design: design.fontDesign)
+            font(.body, design: design)
+        }
+    }
+
+    func font(_ textStyle: Font.TextStyle, design: JournalFontDesignPreference, weight: Font.Weight? = nil) -> Font {
+        let baseSize = basePointSize(for: textStyle)
+        let adjustedSize = baseSize * scale
+        return .system(size: adjustedSize, weight: weight ?? defaultWeight(for: textStyle), design: design.fontDesign)
+    }
+
+    func fixedFont(size: CGFloat, design: JournalFontDesignPreference, weight: Font.Weight = .regular) -> Font {
+        .system(size: size * scale, weight: weight, design: design.fontDesign)
+    }
+
+    func uiFont(size: CGFloat, design: JournalFontDesignPreference, weight: UIFont.Weight) -> UIFont {
+        design.uiFont(size: size * scale, weight: weight)
+    }
+
+    static var current: JournalFontPreference {
+        value(for: currentRawValue)
+    }
+
+    static func setCurrent(_ preference: JournalFontPreference) {
+        currentRawValue = preference.rawValue
+    }
+
+    private static var currentRawValue = UserDefaults.standard.string(forKey: "journalFontPreference") ?? standard.rawValue
+
+    private var scale: CGFloat {
+        switch self {
+        case .compact:
+            1.0
+        case .standard:
+            1.12
+        case .spacious:
+            1.24
+        }
+    }
+
+    private func basePointSize(for textStyle: Font.TextStyle) -> CGFloat {
+        switch textStyle {
+        case .largeTitle:
+            34
+        case .title:
+            28
+        case .title2:
+            22
+        case .title3:
+            20
+        case .headline:
+            17
+        case .subheadline:
+            15
+        case .body:
+            17
+        case .callout:
+            16
+        case .footnote:
+            13
+        case .caption:
+            12
+        case .caption2:
+            11
+        @unknown default:
+            17
+        }
+    }
+
+    private func defaultWeight(for textStyle: Font.TextStyle) -> Font.Weight {
+        switch textStyle {
+        case .headline:
+            .semibold
+        default:
+            .regular
         }
     }
 
@@ -674,8 +2002,49 @@ enum JournalFontDesignPreference: String, CaseIterable, Identifiable {
         }
     }
 
+    func font(_ textStyle: Font.TextStyle, weight: Font.Weight? = nil) -> Font {
+        JournalFontPreference.current.font(textStyle, design: self, weight: weight)
+    }
+
+    func unscaledFont(_ textStyle: Font.TextStyle, weight: Font.Weight? = nil) -> Font {
+        let baseFont = Font.system(textStyle, design: fontDesign)
+        if let weight {
+            return baseFont.weight(weight)
+        }
+
+        return baseFont
+    }
+
+    func fixedFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        JournalFontPreference.current.fixedFont(size: size, design: self, weight: weight)
+    }
+
+    func unscaledFixedFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: fontDesign)
+    }
+
+    func uiFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let baseDescriptor = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
+        let design: UIFontDescriptor.SystemDesign
+        switch self {
+        case .system:
+            return UIFont.systemFont(ofSize: size, weight: weight)
+        case .serif:
+            design = .serif
+        case .rounded:
+            design = .rounded
+        case .monospaced:
+            design = .monospaced
+        }
+
+        return UIFont(descriptor: baseDescriptor.withDesign(design) ?? baseDescriptor, size: size)
+    }
+
     static func value(for rawValue: String) -> JournalFontDesignPreference {
-        JournalFontDesignPreference(rawValue: rawValue) ?? .system
+        if rawValue == "sanFranciscoPro" {
+            return .system
+        }
+        return JournalFontDesignPreference(rawValue: rawValue) ?? .system
     }
 }
 
@@ -704,84 +2073,249 @@ struct ProfileEmojiPicker: View {
 }
 
 private struct InsightMetricCard: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let title: String
     let value: String
-    let systemImage: String
+    let imageName: String
 
     var body: some View {
         VStack(alignment: .center, spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.subheadline)
+            Image(imageName)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 29, height: 29)
                 .foregroundStyle(Color.accentColor)
             Text(value)
-                .font(.headline.bold())
+                .font(selectedFontDesignPreference.font(.headline, weight: .bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.58)
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                 .foregroundStyle(.primary.opacity(0.72))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.72)
         }
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 108, alignment: .center)
         .padding(.horizontal, 10)
         .padding(.vertical, 14)
-        .background(Color.secondary.opacity(0.08))
+        .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 28))
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct InsightMemoryCard: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    let mode: InsightsMemoryCardMode
+    let entry: JournalEntry?
+    let openEntry: (JournalEntry) -> Void
+
+    var body: some View {
+        Group {
+            if let entry {
+                Button {
+                    openEntry(entry)
+                } label: {
+                    cardContent(entryTitle: entryTitle(entry))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Open journal")
+            } else {
+                cardContent(entryTitle: emptyTitle)
+                    .accessibilityHint(emptyDescription)
+            }
+        }
+    }
+
+    private func cardContent(entryTitle: String) -> some View {
+        VStack(alignment: .center, spacing: 24) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+
+                Text(mode.displayName)
+                    .font(selectedFontDesignPreference.font(.headline))
+                    .foregroundStyle(.primary)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            Text(entryTitle)
+                .font(selectedFontDesignPreference.font(.title2, weight: .bold))
+                .foregroundStyle(entry == nil ? .secondary : Color.accentColor)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .center)
+        .background(AppThemeCardBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 28))
+        .contentShape(RoundedRectangle(cornerRadius: 28))
+    }
+
+    private func entryTitle(_ entry: JournalEntry) -> String {
+        let trimmed = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled Journal" : trimmed
+    }
+
+    private var emptyTitle: String {
+        switch mode {
+        case .onThisDay:
+            "No entries for today"
+        case .randomEntry:
+            "No journals yet"
+        }
+    }
+
+    private var emptyDescription: String {
+        switch mode {
+        case .onThisDay:
+            "Entries from this date will appear here."
+        case .randomEntry:
+            "Record or write a journal to begin."
+        }
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
 }
 
 private struct ThemeCloudView: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let themes: [(theme: String, count: Int)]
 
-    private var maxCount: Int {
-        themes.map(\.count).max() ?? 1
+    private var rankedCounts: [Int] {
+        Array(Set(displayThemes.map(\.count))).sorted(by: >)
     }
 
-    private var displayThemes: ArraySlice<(theme: String, count: Int)> {
-        themes.prefix(12)
+    private var displayThemes: [(theme: String, count: Int)] {
+        Array(themes.prefix(10))
+    }
+
+    private var mainTheme: (theme: String, count: Int)? {
+        displayThemes.max { first, second in
+            if first.count == second.count {
+                return first.theme > second.theme
+            }
+            return first.count < second.count
+        }
+    }
+
+    private var surroundingThemes: [(theme: String, count: Int)] {
+        guard let mainTheme else { return [] }
+        var hasSkippedMainTheme = false
+        return displayThemes.filter { item in
+            if !hasSkippedMainTheme, item.theme == mainTheme.theme, item.count == mainTheme.count {
+                hasSkippedMainTheme = true
+                return false
+            }
+            return true
+        }
+    }
+
+    private var topThemes: [(theme: String, count: Int)] {
+        Array(surroundingThemes.prefix(surroundingThemes.count / 2))
+    }
+
+    private var bottomThemes: [(theme: String, count: Int)] {
+        Array(surroundingThemes.dropFirst(surroundingThemes.count / 2))
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            if let mainTheme = displayThemes.first {
+        VStack(spacing: 12) {
+            if !topThemes.isEmpty {
+                themeFlow(topThemes, startIndex: 1)
+            }
+
+            Spacer(minLength: 0)
+
+            if let mainTheme {
                 Text(mainTheme.theme)
-                    .font(.system(size: fontSize(for: mainTheme.count) + 6, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .font(selectedFontDesignPreference.fixedFont(size: fontSize(for: mainTheme.count) + 4, weight: .bold))
+                    .foregroundStyle(themeColor(at: 0))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.62)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .accessibilityLabel(mainTheme.theme)
             }
 
-            ThemeCloudFlowLayout(spacing: 11, lineSpacing: 13) {
-                ForEach(Array(displayThemes.dropFirst().enumerated()), id: \.element.theme) { index, item in
-                    Text(item.theme)
-                        .fontWeight(index < 2 ? .semibold : .regular)
-                        .foregroundStyle(foregroundStyle(at: index + 1))
-                        .font(.system(size: fontSize(for: item.count)))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .padding(.horizontal, 2)
-                        .accessibilityLabel(item.theme)
-                }
+            Spacer(minLength: 0)
+
+            if !bottomThemes.isEmpty {
+                themeFlow(bottomThemes, startIndex: topThemes.count + 1)
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(minHeight: 230, alignment: .center)
+        .frame(height: 236, alignment: .center)
         .padding(.horizontal, 4)
-        .padding(.vertical, 12)
+        .clipped()
     }
 
     private func fontSize(for count: Int) -> CGFloat {
-        let ratio = CGFloat(count) / CGFloat(maxCount)
-        return 17 + (15 * ratio)
+        guard rankedCounts.count > 1 else {
+            return 24
+        }
+
+        let rank = rankedCounts.firstIndex(of: count) ?? rankedCounts.count - 1
+        let sizes: [CGFloat] = [24, 21.5, 19.5, 17.5, 16, 15, 14]
+        if rank < sizes.count {
+            return sizes[rank]
+        }
+
+        return 13
     }
 
-    private func foregroundStyle(at index: Int) -> Color {
-        let colors: [Color] = [.primary, .accentColor, .secondary, .teal, .indigo, .mint]
+    private func themeFlow(_ items: [(theme: String, count: Int)], startIndex: Int) -> some View {
+        ThemeCloudFlowLayout(spacing: 9, lineSpacing: 10) {
+            ForEach(Array(items.enumerated()), id: \.element.theme) { index, item in
+                let displayIndex = startIndex + index
+                let weight = displayIndex <= 2 ? Font.Weight.semibold : .regular
+                Text(item.theme)
+                    .fontWeight(weight)
+                    .foregroundStyle(themeColor(at: displayIndex))
+                    .font(selectedFontDesignPreference.fixedFont(size: fontSize(for: item.count), weight: weight))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .padding(.horizontal, 1)
+                    .accessibilityLabel(item.theme)
+            }
+        }
+    }
+
+    private func themeColor(at index: Int) -> Color {
+        let colors: [Color] = [
+            .accentColor,
+            Color(hex: "#2A9D8F"),
+            Color(hex: "#E76F51"),
+            Color(hex: "#5E60CE"),
+            Color(hex: "#D18400"),
+            Color(hex: "#0077B6"),
+            Color(hex: "#C44569"),
+            Color(hex: "#4D908E"),
+            Color(hex: "#9B5DE5"),
+            Color(hex: "#F15BB5"),
+            Color(hex: "#0081A7"),
+            Color(hex: "#BC6C25"),
+            Color(hex: "#577590"),
+            Color(hex: "#6A994E"),
+            Color(hex: "#B5179E"),
+            Color(hex: "#F77F00")
+        ]
         return colors[index % colors.count]
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
 }
 
@@ -1052,13 +2586,13 @@ enum JournalInsightCalculator {
         ThemeRule(label: "Money", terms: ["money", "budget", "cost", "bill", "billing", "expensive", "salary", "钱", "预算", "花费", "账单", "贵", "工资"]),
         ThemeRule(label: "Home Life", terms: ["home", "apartment", "room", "cleaning", "laundry", "cook", "cooking", "家里", "公寓", "房间", "打扫", "洗衣", "做饭"]),
         ThemeRule(label: "Self Reflection", terms: ["realized", "reflect", "reflection", "understand myself", "feel like", "i noticed", "意识到", "反思", "理解自己", "我发现"]),
-        ThemeRule(label: "App Testing", terms: ["test", "testing", "app", "voice journal", "transcription", "recording", "测试", "应用", "语音日记", "转录", "录音"])
+        ThemeRule(label: "App Testing", terms: ["test", "testing", "app", "voice journal", "flara day", "transcription", "recording", "测试", "应用", "语音日记", "转录", "录音"])
     ]
 }
 
 enum MarkdownJournalExporter {
     static func makeMarkdown(entries: [JournalEntry]) -> String {
-        var lines = ["# Voice Journal Export", ""]
+        var lines = ["# Flara Day Export", ""]
 
         if entries.isEmpty {
             lines.append("No journals yet.")

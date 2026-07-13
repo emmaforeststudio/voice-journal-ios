@@ -16,6 +16,10 @@ final class AudioRecorder: NSObject, ObservableObject {
         recordingURL
     }
 
+    var currentRecordingTime: TimeInterval {
+        audioRecorder?.currentTime ?? 0
+    }
+
     func prepare() async throws {
         guard !isRecording else { return }
 
@@ -78,6 +82,26 @@ final class AudioRecorder: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: url)
     }
 
+    func audioChunkData(from startTime: TimeInterval, to endTime: TimeInterval) throws -> Data? {
+        guard let recordingURL else { throw RecordingError.notRecording }
+        let fileData = try Data(contentsOf: recordingURL)
+        guard let dataOffset = Self.wavDataOffset(in: fileData), fileData.count > dataOffset else {
+            throw RecordingError.audioChunkUnavailable
+        }
+
+        let byteRate = 44_100 * 1 * 16 / 8
+        let blockAlign = 1 * 16 / 8
+        let startByte = dataOffset + Self.alignedByteOffset(for: max(0, startTime), byteRate: byteRate, blockAlign: blockAlign)
+        let endByte = min(
+            fileData.count,
+            dataOffset + Self.alignedByteOffset(for: max(startTime, endTime), byteRate: byteRate, blockAlign: blockAlign)
+        )
+
+        guard endByte > startByte + byteRate / 2 else { return nil }
+        let pcmData = fileData.subdata(in: startByte..<endByte)
+        return Self.wavData(fromPCMData: pcmData)
+    }
+
     private func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
             if #available(iOS 17.0, *) {
@@ -96,6 +120,38 @@ final class AudioRecorder: NSObject, ObservableObject {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("wav")
+    }
+
+    private static func wavDataOffset(in data: Data) -> Int? {
+        let marker = Data([0x64, 0x61, 0x74, 0x61])
+        guard let markerRange = data.range(of: marker), markerRange.upperBound + 4 <= data.count else {
+            return nil
+        }
+        return markerRange.upperBound + 4
+    }
+
+    private static func alignedByteOffset(for time: TimeInterval, byteRate: Int, blockAlign: Int) -> Int {
+        let byteOffset = max(0, Int(time * Double(byteRate)))
+        return byteOffset - byteOffset % blockAlign
+    }
+
+    private static func wavData(fromPCMData pcmData: Data) -> Data {
+        var data = Data()
+        data.appendASCII("RIFF")
+        data.appendUInt32LittleEndian(UInt32(36 + pcmData.count))
+        data.appendASCII("WAVE")
+        data.appendASCII("fmt ")
+        data.appendUInt32LittleEndian(16)
+        data.appendUInt16LittleEndian(1)
+        data.appendUInt16LittleEndian(1)
+        data.appendUInt32LittleEndian(44_100)
+        data.appendUInt32LittleEndian(44_100 * 1 * 16 / 8)
+        data.appendUInt16LittleEndian(1 * 16 / 8)
+        data.appendUInt16LittleEndian(16)
+        data.appendASCII("data")
+        data.appendUInt32LittleEndian(UInt32(pcmData.count))
+        data.append(pcmData)
+        return data
     }
 
     private func startMetering() {
@@ -122,6 +178,7 @@ enum RecordingError: LocalizedError {
     case couldNotStart
     case notRecording
     case noAudibleAudio
+    case audioChunkUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -134,7 +191,25 @@ enum RecordingError: LocalizedError {
         case .notRecording:
             "There is no active recording to stop."
         case .noAudibleAudio:
-            "The microphone captured silence. Check that Voice Journal has microphone access, disconnect any unused Bluetooth microphone, and try again."
+            "The microphone captured silence. Check that Flara Day has microphone access, disconnect any unused Bluetooth microphone, and try again."
+        case .audioChunkUnavailable:
+            "Live preview could not prepare the latest audio chunk."
         }
+    }
+}
+
+private extension Data {
+    mutating func appendASCII(_ string: String) {
+        append(string.data(using: .ascii)!)
+    }
+
+    mutating func appendUInt16LittleEndian(_ value: UInt16) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
+    }
+
+    mutating func appendUInt32LittleEndian(_ value: UInt32) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
     }
 }

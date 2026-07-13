@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReviewDraftView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
     @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @FocusState private var focusedField: Field?
@@ -47,7 +48,7 @@ struct ReviewDraftView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         if let notice {
                             Label(notice, systemImage: "exclamationmark.bubble")
-                                .font(.caption)
+                                .font(selectedFontDesignPreference.font(.caption))
                                 .foregroundStyle(.secondary)
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,8 +65,10 @@ struct ReviewDraftView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 92)
                 }
+                .background(AppThemeBackground())
                 .scrollDismissesKeyboard(.interactively)
             }
+            .background(AppThemeBackground())
             .onChange(of: journalBody) { _, newValue in
                 title = processor.makeTitle(from: newValue, language: language)
                 if !didManuallyChooseEmoji {
@@ -77,7 +80,8 @@ struct ReviewDraftView: View {
             }
             .sheet(isPresented: $isShowingDatePicker) {
                 NavigationStack {
-                    DatePicker("Journal Date", selection: $journalDate, displayedComponents: [.date, .hourAndMinute])
+                DatePicker("Journal Date", selection: $journalDate, displayedComponents: [.date, .hourAndMinute])
+                    .font(selectedFontDesignPreference.font(.body))
                         .datePickerStyle(.graphical)
                         .padding()
                         .navigationTitle("Date & Time")
@@ -139,8 +143,18 @@ struct ReviewDraftView: View {
                     isShowingDeleteConfirmation = true
                 }
             } label: {
-                Image(systemName: isEditing ? "checkmark" : "trash")
-                    .font(.headline.weight(.semibold))
+                Group {
+                    if isEditing {
+                        Image(systemName: "checkmark")
+                            .font(.headline.weight(.semibold))
+                    } else {
+                        Image("icon-trash")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 21, height: 21)
+                    }
+                }
                     .frame(width: 40, height: 40)
                     .background((isEditing ? Color.accentColor : Color.red).opacity(0.10))
                     .clipShape(Circle())
@@ -158,9 +172,13 @@ struct ReviewDraftView: View {
             Button {
                 selectRecordingMode()
             } label: {
-                Image(systemName: "mic")
+                Image("tab-create-microphone")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(isRecordingMode ? 0.90 : 0))
+                    .background(modeSelectionBackground(isRecordingMode))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -169,15 +187,19 @@ struct ReviewDraftView: View {
             Button {
                 beginEditing()
             } label: {
-                Image(systemName: "square.and.pencil")
+                Image("icon-edit-text")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 20, height: 20)
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(isEditing ? 0.90 : 0.72))
+                    .background(modeSelectionBackground(isEditing))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Edit journal")
         }
-        .font(.title3)
+            .font(selectedFontDesignPreference.font(.title3))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -189,14 +211,14 @@ struct ReviewDraftView: View {
     private var titleView: some View {
         if isEditing {
             TextField("Title", text: $title, axis: .vertical)
-                .font(.title2.weight(.semibold))
+                .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .textInputAutocapitalization(.sentences)
                 .foregroundStyle(title == "Untitled Journal" ? .secondary : .primary)
                 .lineLimit(1...4)
                 .focused($focusedField, equals: .title)
         } else {
             Text(title.isEmpty ? "Untitled Journal" : title)
-                .font(.title2.weight(.semibold))
+                .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .foregroundStyle(title == "Untitled Journal" ? .secondary : .primary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
@@ -209,7 +231,7 @@ struct ReviewDraftView: View {
                 isShowingDatePicker = true
             } label: {
                 Text(journalDate.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()))
-                    .font(.footnote)
+                    .font(selectedFontDesignPreference.font(.footnote))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -218,7 +240,7 @@ struct ReviewDraftView: View {
 
             Spacer(minLength: 8)
 
-            EmojiSelector(selection: $emoji, itemSize: 32, font: .body) {
+            EmojiSelector(selection: $emoji, itemSize: 32, font: selectedFontDesignPreference.font(.body)) {
                 didManuallyChooseEmoji = true
             }
             .frame(maxWidth: 210, alignment: .trailing)
@@ -258,7 +280,12 @@ struct ReviewDraftView: View {
                     beginEditing()
                 }
             } label: {
-                Label(bottomPrimaryTitle, systemImage: isRecordingMode ? "mic.fill" : "pencil")
+                Label {
+                    Text(bottomPrimaryTitle)
+                        .font(selectedFontDesignPreference.font(.body))
+                } icon: {
+                    Image(isRecordingMode ? "tab-create-microphone" : "icon-edit-text")
+                }
                     .frame(width: 128)
             }
             .buttonStyle(.bordered)
@@ -268,6 +295,7 @@ struct ReviewDraftView: View {
                 saveDraft()
             } label: {
                 Text("Save")
+                    .font(selectedFontDesignPreference.font(.body))
                     .frame(width: 128)
             }
             .buttonStyle(.borderedProminent)
@@ -295,6 +323,15 @@ struct ReviewDraftView: View {
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private func modeSelectionBackground(_ isSelected: Bool) -> Color {
+        guard isSelected else { return .clear }
+        return selectedTheme.colorScheme == .dark ? selectedTheme.primaryColor : Color.white.opacity(0.90)
     }
 
     private func beginEditing() {
@@ -368,8 +405,10 @@ struct EmojiSelector: View {
 struct ContinuationRecordingView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showLivePreview") private var showLivePreview = true
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @StateObject private var viewModel = RecorderViewModel()
     @State private var didStartRecording = false
+    @State private var isFinishingRecording = false
     let onComplete: (JournalDraft) -> Void
     let onCancel: () -> Void
 
@@ -378,10 +417,12 @@ struct ContinuationRecordingView: View {
             header
 
             ZStack(alignment: .bottom) {
+                AppThemeBackground()
+
                 ScrollView {
                     VStack(spacing: 0) {
                         Text("Continue Journal")
-                            .font(.title2.bold())
+                            .font(selectedContinuationFontDesignPreference.font(.title2, weight: .bold))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 18)
 
@@ -392,7 +433,7 @@ struct ContinuationRecordingView: View {
 
                         if let error = viewModel.errorMessage {
                             Text(error)
-                                .font(.callout)
+                                .font(selectedContinuationFontDesignPreference.font(.callout))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.top, 18)
@@ -402,6 +443,7 @@ struct ContinuationRecordingView: View {
 
                         if viewModel.isProcessing {
                             ProgressView("Adding to your journal")
+                                .font(selectedContinuationFontDesignPreference.font(.body))
                                 .padding(.top, 22)
                         }
                     }
@@ -415,13 +457,17 @@ struct ContinuationRecordingView: View {
 
                     Button {
                         if viewModel.isRecording {
+                            isFinishingRecording = true
                             viewModel.stopRecording()
                         } else if !viewModel.isProcessing {
+                            isFinishingRecording = false
                             viewModel.startRecording()
                         }
                     } label: {
                         ContinuationWaveformRecordButton(
                             isRecording: viewModel.isRecording,
+                            isProcessing: viewModel.isProcessing,
+                            isFinishingRecording: isFinishingRecording,
                             level: viewModel.microphoneLevel,
                             hasDetectedAudio: viewModel.hasDetectedAudio
                         )
@@ -434,6 +480,8 @@ struct ContinuationRecordingView: View {
             }
             .padding(.horizontal, 24)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppThemeBackground())
         .task {
             guard !didStartRecording else { return }
             didStartRecording = true
@@ -442,6 +490,11 @@ struct ContinuationRecordingView: View {
         }
         .onChange(of: showLivePreview) { _, newValue in
             viewModel.updateLivePreviewEnabled(newValue)
+        }
+        .onChange(of: viewModel.errorMessage) { _, newValue in
+            if newValue != nil {
+                isFinishingRecording = false
+            }
         }
         .onChange(of: viewModel.draft?.id) { _, _ in
             guard let draft = viewModel.draft else { return }
@@ -464,7 +517,7 @@ struct ContinuationRecordingView: View {
                 Image(systemName: "chevron.left")
                     .font(.headline.weight(.semibold))
                     .frame(width: 40, height: 40)
-                    .background(Color.secondary.opacity(0.10))
+                    .background(AppThemeCardBackground())
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -480,11 +533,11 @@ struct ContinuationRecordingView: View {
     private var livePreviewContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Live Preview")
-                .font(.caption.weight(.semibold))
+                .font(selectedContinuationFontDesignPreference.font(.caption, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             Text(livePreviewText)
-                .font(.body)
+                .font(selectedContinuationFontDesignPreference.font(.body))
                 .foregroundStyle(viewModel.liveTranscript.isEmpty ? .secondary : .primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(nil)
@@ -498,16 +551,22 @@ struct ContinuationRecordingView: View {
             ? viewModel.livePreviewNotice ?? "Listening... this continuation will be added to the current journal."
             : viewModel.liveTranscript
     }
+
+    private var selectedContinuationFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
 }
 
 private struct ContinuationWaveformRecordButton: View {
     let isRecording: Bool
+    let isProcessing: Bool
+    let isFinishingRecording: Bool
     let level: Float
     let hasDetectedAudio: Bool
 
     var body: some View {
         TimelineView(.animation) { context in
-            if isRecording {
+            if isRecording || isProcessing || isFinishingRecording {
                 let time = context.date.timeIntervalSinceReferenceDate
 
                 HStack(spacing: 5) {
@@ -523,8 +582,11 @@ private struct ContinuationWaveformRecordButton: View {
                 .clipShape(Circle())
                 .shadow(color: Color.red.opacity(0.18), radius: 18, y: 10)
             } else {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 44, weight: .semibold))
+                Image("tab-create-microphone")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 52, height: 52)
                     .frame(width: 106, height: 106)
                     .foregroundStyle(.white)
                     .background(Color.accentColor)

@@ -4,15 +4,19 @@ import SwiftUI
 struct CalendarJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("importantJournalEntryIDs") private var importantJournalEntryIDs = ""
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @Query(sort: \JournalEntry.journalDate, order: .reverse) private var entries: [JournalEntry]
+    let resetToken: Int
     @State private var visibleMonth = Date()
     @State private var selectedDate = Date()
     @State private var query = ""
     @State private var isSearchActive = false
     @State private var selectedEntry: JournalEntry?
+    @State private var renderedFontPreference = JournalFontPreference.current.rawValue
 
     private let calendar = Calendar.current
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 7)
     private let processor = JournalProcessor()
 
     var body: some View {
@@ -30,12 +34,31 @@ struct CalendarJournalView: View {
                         selectedEntries
                     }
                 }
+                .id(renderedFontPreference)
                 .padding()
             }
+            .background(AppThemeBackground())
             .navigationDestination(item: $selectedEntry) { entry in
                 EntryDetailView(entry: entry)
             }
+            .onAppear {
+                refreshRenderedFontPreference()
+            }
+            .onChange(of: resetToken) { _, _ in
+                resetToMainCalendar()
+            }
         }
+        .background(AppThemeBackground())
+    }
+
+    private func resetToMainCalendar() {
+        query = ""
+        isSearchActive = false
+        selectedEntry = nil
+    }
+
+    private func refreshRenderedFontPreference() {
+        renderedFontPreference = JournalFontPreference.current.rawValue
     }
 
     private var searchField: some View {
@@ -43,6 +66,7 @@ struct CalendarJournalView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("Search title or journal", text: $query)
+                .font(selectedFontDesignPreference.font(.body))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -58,20 +82,22 @@ struct CalendarJournalView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.secondary.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(AppThemeCardBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
     @ViewBuilder
     private var searchResults: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Text(trimmedQuery.isEmpty ? "All Journals" : "Search Results")
-                .font(.headline)
+                .font(selectedFontDesignPreference.font(.headline))
 
             if searchEntries.isEmpty {
-                ContentUnavailableView(
-                    trimmedQuery.isEmpty ? "No journals" : "No matching journals",
-                    systemImage: trimmedQuery.isEmpty ? "book.closed" : "magnifyingglass"
+                AppUnavailableView(
+                    title: trimmedQuery.isEmpty ? "No journals" : "No matching journals",
+                    systemImage: trimmedQuery.isEmpty ? "book.closed" : "magnifyingglass",
+                    description: trimmedQuery.isEmpty ? "Record or write a journal to begin." : "Try a different title or phrase.",
+                    size: trimmedQuery.isEmpty ? .prominent : .standard
                 )
             } else {
                 ForEach(searchEntries) { entry in
@@ -90,7 +116,7 @@ struct CalendarJournalView: View {
     private var calendarHeader: some View {
         HStack {
             Text(visibleMonth.formatted(.dateTime.month(.wide).year()))
-                .font(.title2.bold())
+                .font(selectedFontDesignPreference.font(.title2, weight: .bold))
 
             Spacer()
 
@@ -106,7 +132,7 @@ struct CalendarJournalView: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .frame(width: 42, height: 42)
-                    .background(Color.secondary.opacity(0.10))
+                    .background(AppThemeCardBackground())
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -118,7 +144,7 @@ struct CalendarJournalView: View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(calendar.shortWeekdaySymbols, id: \.self) { day in
                 Text(day)
-                    .font(.caption.weight(.semibold))
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
             }
@@ -152,10 +178,10 @@ struct CalendarJournalView: View {
     }
 
     private var selectedEntries: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center) {
                 Text(displayedSelectedDate.formatted(.dateTime.weekday(.wide).month().day()))
-                    .font(.headline)
+                    .font(selectedFontDesignPreference.font(.headline))
 
                 Spacer()
 
@@ -166,13 +192,13 @@ struct CalendarJournalView: View {
                             visibleMonth = Date()
                         }
                     } label: {
-                        Text("Tap to today's date")
-                            .font(.caption.weight(.semibold))
+                        Text("Tap to today")
+                            .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.78)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
-                            .background(Color.accentColor.opacity(0.12))
+                            .background(calendarShortcutBackground)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -182,7 +208,12 @@ struct CalendarJournalView: View {
 
             let dayEntries = entries(on: displayedSelectedDate)
             if dayEntries.isEmpty {
-                ContentUnavailableView("No journals", systemImage: "book.closed", description: Text("Record or write a journal for this day."))
+                AppUnavailableView(
+                    title: "No journals",
+                    systemImage: "book.closed",
+                    description: "Record or write a journal for this day.",
+                    size: .prominent
+                )
             } else {
                 ForEach(dayEntries) { entry in
                     SwipeableJournalRow(
@@ -235,6 +266,18 @@ struct CalendarJournalView: View {
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var calendarShortcutBackground: Color {
+        Color.accentColor.opacity(selectedTheme.colorScheme == .dark ? 0.44 : 0.26)
     }
 
     private var searchEntries: [JournalEntry] {
@@ -312,6 +355,8 @@ struct CalendarJournalView: View {
 }
 
 struct CalendarDayCell: View {
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let date: Date
     let isSelected: Bool
     let emoji: String?
@@ -319,20 +364,39 @@ struct CalendarDayCell: View {
     var body: some View {
         VStack(spacing: 4) {
             Text(date.formatted(.dateTime.day()))
-                .font(.callout.weight(isSelected ? .bold : .regular))
+                .font(selectedFontDesignPreference.font(.callout, weight: isSelected ? .bold : .regular))
             Text(emoji ?? "")
-                .font(.caption)
+                .font(selectedFontDesignPreference.font(.caption))
                 .lineLimit(1)
                 .frame(height: 14)
         }
-        .frame(maxWidth: .infinity, minHeight: 54)
-        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
+        .frame(width: 42, height: 54)
+        .background {
+            if isSelected {
+                selectedDateBackground
+            } else {
+                AppThemeCardBackground()
+            }
+        }
+        .foregroundStyle(isSelected && selectedTheme.colorScheme == .dark ? Color.white : Color.primary)
         .clipShape(RoundedRectangle(cornerRadius: 24))
+        .frame(maxWidth: .infinity)
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedDateBackground: Color {
+        selectedTheme.colorScheme == .dark ? selectedTheme.primaryColor.opacity(0.88) : Color.accentColor.opacity(0.26)
     }
 }
 
 struct JournalRow: View {
-    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let entry: JournalEntry
     let isImportant: Bool
@@ -343,7 +407,7 @@ struct JournalRow: View {
             HStack(alignment: .center, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
                     Text(entry.title)
-                        .font(.headline)
+                        .font(selectedFontDesignPreference.font(.headline))
                         .foregroundStyle(.primary)
                         .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
@@ -364,7 +428,7 @@ struct JournalRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color.secondary.opacity(0.08))
+        .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .overlay(alignment: .topTrailing) {
             if isImportant {
@@ -382,7 +446,7 @@ struct JournalRow: View {
     }
 
     private var selectedFontPreference: JournalFontPreference {
-        JournalFontPreference.value(for: journalFontPreference)
+        JournalFontPreference.current
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -513,8 +577,11 @@ private struct SwipeableJournalRow: View {
                 deleteEntry(entry)
             }
         } label: {
-            Image(systemName: "trash")
-                .font(.headline.weight(.semibold))
+            Image("icon-trash")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 21, height: 21)
                 .foregroundStyle(.white)
                 .frame(width: actionWidth, height: rowHeight)
                 .background(Color.red)

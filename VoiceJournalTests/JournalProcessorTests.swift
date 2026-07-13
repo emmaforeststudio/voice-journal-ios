@@ -40,7 +40,7 @@ final class JournalProcessorTests: XCTestCase {
             language: .english
         )
 
-        XCTAssertEqual(title, "Testing Voice Journal")
+        XCTAssertEqual(title, "Testing Flara Day")
     }
 
     func testTitleRecognizesAccomplishment() {
@@ -123,7 +123,7 @@ final class JournalProcessorTests: XCTestCase {
 
         let markdown = MarkdownJournalExporter.makeMarkdown(entries: [entry])
 
-        XCTAssertTrue(markdown.contains("# Voice Journal Export"))
+        XCTAssertTrue(markdown.contains("# Flara Day Export"))
         XCTAssertTrue(markdown.contains("## A Quiet Morning"))
         XCTAssertTrue(markdown.contains("- Mood: 😊"))
         XCTAssertTrue(markdown.contains("- Language: English"))
@@ -131,7 +131,7 @@ final class JournalProcessorTests: XCTestCase {
     }
 
     func testMarkdownExportEmptyState() {
-        XCTAssertEqual(MarkdownJournalExporter.makeMarkdown(entries: []), "# Voice Journal Export\n\nNo journals yet.")
+        XCTAssertEqual(MarkdownJournalExporter.makeMarkdown(entries: []), "# Flara Day Export\n\nNo journals yet.")
     }
 
     func testMarkdownImportReadsExportedJournal() {

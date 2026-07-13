@@ -3,7 +3,7 @@ import SwiftUI
 
 @main
 struct VoiceJournalApp: App {
-    @AppStorage("appThemePreference") private var appThemePreference = AppThemePreference.system.rawValue
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
 
     var body: some Scene {
         WindowGroup {
@@ -22,7 +22,9 @@ struct VoiceJournalApp: App {
                 }
 #endif
             }
-            .preferredColorScheme(AppThemePreference.value(for: appThemePreference).colorScheme)
+            .preferredColorScheme(AppColorTheme.value(for: themeColorPreference).colorScheme)
+            .tint(AppColorTheme.value(for: themeColorPreference).primaryColor)
+            .background(AppThemeBackground())
         }
         .modelContainer(for: JournalEntry.self)
     }

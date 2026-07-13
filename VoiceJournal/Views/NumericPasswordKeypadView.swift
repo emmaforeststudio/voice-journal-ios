@@ -17,6 +17,7 @@ struct NumericPasswordDots: View {
 }
 
 struct NumericPasswordKeypad: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let onDigit: (String) -> Void
     let onDelete: () -> Void
 
@@ -59,12 +60,16 @@ struct NumericPasswordKeypad: View {
             onDigit(digit)
         } label: {
             Text(digit)
-                .font(.title.weight(.medium))
+                .font(selectedFontDesignPreference.font(.title, weight: .medium))
                 .frame(width: 72, height: 72)
                 .background(Color.secondary.opacity(0.10))
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Digit \(digit)")
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
 }

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Voice Journal</string>
+	<string>Flara Day</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,13 +26,13 @@
 		<true/>
 	</dict>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Voice Journal uses Face ID to lock and protect your private journal entries.</string>
+	<string>Flara Day uses Face ID to lock and protect your private journal entries.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Voice Journal connects to your Mac during development to securely process journal recordings.</string>
+	<string>Flara Day connects to your Mac during development to securely process journal recordings.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Voice Journal uses the microphone to record your journal entries.</string>
+	<string>Flara Day uses the microphone to record your journal entries.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Voice Journal uses on-device speech recognition to transcribe your private journal entries.</string>
+	<string>Flara Day uses on-device speech recognition to transcribe your private journal entries.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -41,6 +41,6 @@
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>VoiceJournalBackendURL</key>
-	<string>http://Emmas-MacBook-Pro.local:8787</string>
+	<string>$(VOICE_JOURNAL_BACKEND_URL)</string>
 </dict>
 </plist>

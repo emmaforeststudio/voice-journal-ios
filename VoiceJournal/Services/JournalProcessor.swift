@@ -160,8 +160,11 @@ struct JournalProcessor {
     private func makeEnglishTitle(from body: String, firstSentence: String) -> String {
         let lowered = body.lowercased()
 
-        if containsAll(lowered, ["test", "voice journal"]) || containsAll(lowered, ["testing", "voice journal"]) {
-            return "Testing Voice Journal"
+        if containsAll(lowered, ["test", "voice journal"])
+            || containsAll(lowered, ["testing", "voice journal"])
+            || containsAll(lowered, ["test", "flara day"])
+            || containsAll(lowered, ["testing", "flara day"]) {
+            return "Testing Flara Day"
         }
 
         if containsAll(lowered, ["good", "day"]) || containsAll(lowered, ["great", "day"]) {

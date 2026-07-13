@@ -5,7 +5,9 @@ struct RecordJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("profileDisplayName") private var profileDisplayName = ""
     @AppStorage("showLivePreview") private var showLivePreview = true
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @StateObject private var viewModel = RecorderViewModel()
+    @State private var renderedFontPreference = JournalFontPreference.current.rawValue
     @State private var createPrompt = "What's on your mind today?"
     let onSaved: () -> Void
 
@@ -15,19 +17,26 @@ struct RecordJournalView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if viewModel.isRecording {
-                    recordingLayout
-                } else {
-                    idleLayout
+            ZStack {
+                AppThemeBackground()
+
+                Group {
+                    if viewModel.isRecording {
+                        recordingLayout
+                    } else {
+                        idleLayout
+                    }
                 }
+                .id(renderedFontPreference)
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(24)
             .task {
                 viewModel.prepareForRecording()
                 viewModel.updateLivePreviewEnabled(showLivePreview)
             }
             .onAppear {
+                refreshRenderedFontPreference()
                 refreshCreatePrompt()
             }
             .onChange(of: showLivePreview) { _, newValue in
@@ -44,6 +53,7 @@ struct RecordJournalView: View {
             }
         }
         .toolbar(viewModel.isRecording ? .hidden : .visible, for: .tabBar)
+        .background(AppThemeBackground())
     }
 
     private var idleLayout: some View {
@@ -53,6 +63,7 @@ struct RecordJournalView: View {
 
             if viewModel.isProcessing {
                 ProgressView("Transcribing and shaping your journal")
+                    .font(selectedFontDesignPreference.font(.body))
                     .padding(.top, 36)
             }
 
@@ -116,7 +127,12 @@ struct RecordJournalView: View {
                 Button {
                     viewModel.createManualDraft()
                 } label: {
-                    Label("Type Journal", systemImage: "square.and.pencil")
+                    Label {
+                        Text("Type Journal")
+                            .font(selectedFontDesignPreference.font(.body))
+                    } icon: {
+                        Image("icon-edit-text")
+                    }
                 }
                 .buttonStyle(.bordered)
             }
@@ -127,7 +143,7 @@ struct RecordJournalView: View {
         VStack(spacing: 8) {
             if !displayName.isEmpty {
                 Text(displayName)
-                    .font(isCompact ? .title2.bold() : .largeTitle.bold())
+                    .font(isCompact ? selectedFontDesignPreference.font(.title2, weight: .bold) : selectedFontDesignPreference.font(.largeTitle, weight: .bold))
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.72)
                     .lineLimit(nil)
@@ -148,20 +164,20 @@ struct RecordJournalView: View {
 
     private func promptFont(isCompact: Bool) -> Font {
         if isCompact {
-            return displayName.isEmpty ? .title2.bold() : .title3.weight(.semibold)
+            return displayName.isEmpty ? selectedFontDesignPreference.font(.title2, weight: .bold) : selectedFontDesignPreference.font(.title3, weight: .semibold)
         }
 
-        return displayName.isEmpty ? .largeTitle.bold() : .title.weight(.semibold)
+        return displayName.isEmpty ? selectedFontDesignPreference.font(.largeTitle, weight: .bold) : selectedFontDesignPreference.font(.title, weight: .semibold)
     }
 
     private var livePreviewContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Live Preview")
-                .font(.caption.weight(.semibold))
+                .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             Text(livePreviewText)
-                .font(.body)
+                .font(selectedFontDesignPreference.font(.body))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(viewModel.liveTranscript.isEmpty ? .secondary : .primary)
                 .lineLimit(nil)
@@ -171,7 +187,7 @@ struct RecordJournalView: View {
 
     private func errorView(_ error: String) -> some View {
         Text(error)
-            .font(.callout)
+            .font(selectedFontDesignPreference.font(.callout))
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .lineLimit(nil)
@@ -180,6 +196,10 @@ struct RecordJournalView: View {
 
     private var displayName: String {
         profileDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
 
     private var livePreviewText: String {
@@ -200,6 +220,10 @@ struct RecordJournalView: View {
         let prompt = prompts.randomElement() ?? prompts[0]
         createPrompt = prompt.capitalizedFirstSentence
     }
+
+    private func refreshRenderedFontPreference() {
+        renderedFontPreference = JournalFontPreference.current.rawValue
+    }
 }
 
 private extension String {
@@ -211,8 +235,11 @@ private extension String {
 
 private struct IdleRecordButton: View {
     var body: some View {
-        Image(systemName: "mic.fill")
-            .font(.system(size: 52, weight: .semibold))
+        Image("tab-create-microphone")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 62, height: 62)
             .frame(width: 132, height: 132)
             .foregroundStyle(.white)
             .background(Color.accentColor)

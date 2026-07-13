@@ -4,6 +4,9 @@ struct LockableRootView<Content: View>: View {
     @AppStorage("faceIDLockEnabled") private var faceIDLockEnabled = false
     @AppStorage("passwordLockEnabled") private var passwordLockEnabled = false
     @AppStorage("appLockPassword") private var appLockPassword = ""
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @Environment(\.scenePhase) private var scenePhase
     @State private var isUnlocked = false
     @State private var passwordAttempt = ""
@@ -68,55 +71,68 @@ struct LockableRootView<Content: View>: View {
     }
 
     private var lockScreen: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 42, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+        ZStack {
+            AppThemeBackground()
 
-            Text("Voice Journal Locked")
-                .font(.title2.bold())
+            VStack(spacing: 24) {
+                Image(lockIconName)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 42, height: 42)
+                    .foregroundColor(selectedTheme.primaryColor)
 
-            if passwordLockEnabled && !appLockPassword.isEmpty {
-                NumericPasswordDots(count: passwordAttempt.count, length: 6)
-            }
+                Text("Flara Day Locked")
+                    .font(selectedFontDesignPreference.font(.title2, weight: .bold))
 
-            if let message {
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+                if passwordLockEnabled && !appLockPassword.isEmpty {
+                    NumericPasswordDots(count: passwordAttempt.count, length: 6)
+                }
 
-            if passwordLockEnabled && !appLockPassword.isEmpty {
-                NumericPasswordKeypad { digit in
-                    guard passwordAttempt.count < 6 else { return }
-                    passwordAttempt.append(digit)
-                    unlockWithPasswordIfComplete()
-                } onDelete: {
-                    if !passwordAttempt.isEmpty {
-                        passwordAttempt.removeLast()
+                if let message {
+                    Text(message)
+                        .font(selectedFontDesignPreference.font(.callout))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                if passwordLockEnabled && !appLockPassword.isEmpty {
+                    NumericPasswordKeypad { digit in
+                        guard passwordAttempt.count < 6 else { return }
+                        passwordAttempt.append(digit)
+                        unlockWithPasswordIfComplete()
+                    } onDelete: {
+                        if !passwordAttempt.isEmpty {
+                            passwordAttempt.removeLast()
+                        }
+                        message = nil
                     }
-                    message = nil
+                }
+
+                if faceIDLockEnabled {
+                    HStack(spacing: 8) {
+                        if isAuthenticatingWithFaceID {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(selectedTheme.primaryColor)
+                        } else {
+                            Image("icon-face-id")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                                .foregroundColor(selectedTheme.primaryColor)
+                        }
+                        Text(isAuthenticatingWithFaceID ? "Checking Face ID" : "Face ID unlocks automatically")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
                 }
             }
-
-            if faceIDLockEnabled {
-                HStack(spacing: 8) {
-                    if isAuthenticatingWithFaceID {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "faceid")
-                    }
-                    Text(isAuthenticatingWithFaceID ? "Checking Face ID" : "Face ID unlocks automatically")
-                }
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
-            }
+            .padding(28)
         }
-        .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial)
+        .tint(selectedTheme.primaryColor)
         .onAppear {
             if faceIDLockEnabled && !isUnlocked {
                 Task {
@@ -126,12 +142,30 @@ struct LockableRootView<Content: View>: View {
         }
     }
 
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var lockIconName: String {
+        if passwordLockEnabled && !appLockPassword.isEmpty {
+            "icon-password-lock"
+        } else if faceIDLockEnabled {
+            "icon-face-id"
+        } else {
+            "icon-password-lock"
+        }
+    }
+
     @MainActor
     private func unlock() async {
         guard faceIDLockEnabled, !isAuthenticatingWithFaceID else { return }
         isAuthenticatingWithFaceID = true
         defer { isAuthenticatingWithFaceID = false }
-        let result = await AppLockAuthenticator.authenticate(reason: "Unlock Voice Journal.")
+        let result = await AppLockAuthenticator.authenticate(reason: "Unlock Flara Day.")
         isUnlocked = result.isSuccess
         message = result.message
     }

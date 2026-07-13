@@ -4,16 +4,31 @@ import SwiftUI
 struct EntryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
     @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @FocusState private var focusedField: Field?
-    @Bindable var entry: JournalEntry
+    let entry: JournalEntry
     @State private var isEditing = false
     @State private var isRecordingMode = false
     @State private var isShowingDeleteConfirmation = false
     @State private var isShowingDatePicker = false
     @State private var isShowingContinuationRecorder = false
+    @State private var draftTitle: String
+    @State private var draftBody: String
+    @State private var draftJournalDate: Date
+    @State private var draftEmoji: String
+    @State private var draftLanguage: JournalLanguage
     private let processor = JournalProcessor()
+
+    init(entry: JournalEntry) {
+        self.entry = entry
+        _draftTitle = State(initialValue: entry.title)
+        _draftBody = State(initialValue: entry.body)
+        _draftJournalDate = State(initialValue: entry.journalDate)
+        _draftEmoji = State(initialValue: entry.emoji)
+        _draftLanguage = State(initialValue: entry.language)
+    }
 
     private enum Field {
         case title
@@ -35,8 +50,10 @@ struct EntryDetailView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 92)
             }
+            .background(AppThemeBackground())
             .scrollDismissesKeyboard(.interactively)
         }
+        .background(AppThemeBackground())
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom) {
@@ -44,7 +61,8 @@ struct EntryDetailView: View {
         }
         .sheet(isPresented: $isShowingDatePicker) {
             NavigationStack {
-                DatePicker("Journal Date", selection: $entry.journalDate, displayedComponents: [.date, .hourAndMinute])
+                DatePicker("Journal Date", selection: $draftJournalDate, displayedComponents: [.date, .hourAndMinute])
+                    .font(selectedFontDesignPreference.font(.body))
                     .datePickerStyle(.graphical)
                     .padding()
                     .navigationTitle("Date & Time")
@@ -77,16 +95,11 @@ struct EntryDetailView: View {
         } message: {
             Text("This cannot be undone.")
         }
-        .onDisappear {
-            entry.updatedAt = .now
-            try? modelContext.save()
-        }
     }
 
     private var detailHeader: some View {
         HStack {
             Button {
-                saveChanges()
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
@@ -104,9 +117,13 @@ struct EntryDetailView: View {
                 Button {
                     selectRecordingMode()
                 } label: {
-                    Image(systemName: "mic")
+                    Image("tab-create-microphone")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
                         .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(isRecordingMode ? 0.90 : 0))
+                        .background(modeSelectionBackground(isRecordingMode))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -115,9 +132,13 @@ struct EntryDetailView: View {
                 Button {
                     beginEditing()
                 } label: {
-                    Image(systemName: "square.and.pencil")
+                    Image("icon-edit-text")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
                         .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(isEditing ? 0.90 : 0.72))
+                        .background(modeSelectionBackground(isEditing))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -139,8 +160,18 @@ struct EntryDetailView: View {
                     isShowingDeleteConfirmation = true
                 }
             } label: {
-                Image(systemName: isEditing ? "checkmark" : "trash")
-                    .font(.headline.weight(.semibold))
+                Group {
+                    if isEditing {
+                        Image(systemName: "checkmark")
+                            .font(.headline.weight(.semibold))
+                    } else {
+                        Image("icon-trash")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 21, height: 21)
+                    }
+                }
                     .frame(width: 40, height: 40)
                     .background((isEditing ? Color.accentColor : Color.red).opacity(0.10))
                     .clipShape(Circle())
@@ -156,15 +187,15 @@ struct EntryDetailView: View {
     @ViewBuilder
     private var titleView: some View {
         if isEditing {
-            TextField("Title", text: $entry.title, axis: .vertical)
-                .font(.title2.weight(.semibold))
+            TextField("Title", text: $draftTitle, axis: .vertical)
+                .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .textInputAutocapitalization(.sentences)
                 .lineLimit(1...4)
                 .focused($focusedField, equals: .title)
         } else {
-            Text(entry.title.isEmpty ? "Untitled Journal" : entry.title)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(entry.title.isEmpty ? .secondary : .primary)
+            Text(draftTitle.isEmpty ? "Untitled Journal" : draftTitle)
+                .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
+                .foregroundStyle(draftTitle.isEmpty ? .secondary : .primary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -175,8 +206,8 @@ struct EntryDetailView: View {
             Button {
                 isShowingDatePicker = true
             } label: {
-                Text(entry.journalDate.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()))
-                    .font(.footnote)
+                Text(draftJournalDate.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()))
+                    .font(selectedFontDesignPreference.font(.footnote))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -185,7 +216,7 @@ struct EntryDetailView: View {
 
             Spacer(minLength: 8)
 
-            EmojiSelector(selection: $entry.emoji, itemSize: 32, font: .body)
+            EmojiSelector(selection: $draftEmoji, itemSize: 32, font: selectedFontDesignPreference.font(.body))
                 .frame(maxWidth: 210, alignment: .trailing)
         }
     }
@@ -193,16 +224,16 @@ struct EntryDetailView: View {
     @ViewBuilder
     private var bodyView: some View {
         if isEditing {
-            TextEditor(text: $entry.body)
+            TextEditor(text: $draftBody)
                 .font(selectedFontPreference.editorFont(design: selectedFontDesignPreference))
                 .frame(minHeight: 460)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, -5)
                 .focused($focusedField, equals: .body)
         } else {
-            Text(entry.body.isEmpty ? "No journal text yet." : entry.body)
+            Text(draftBody.isEmpty ? "No journal text yet." : draftBody)
                 .font(selectedFontPreference.editorFont(design: selectedFontDesignPreference))
-                .foregroundStyle(entry.body.isEmpty ? .secondary : .primary)
+                .foregroundStyle(draftBody.isEmpty ? .secondary : .primary)
                 .lineSpacing(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -223,7 +254,12 @@ struct EntryDetailView: View {
                     beginEditing()
                 }
             } label: {
-                Label(bottomPrimaryTitle, systemImage: isRecordingMode ? "mic.fill" : "pencil")
+                Label {
+                    Text(bottomPrimaryTitle)
+                        .font(selectedFontDesignPreference.font(.body))
+                } icon: {
+                    Image(isRecordingMode ? "tab-create-microphone" : "icon-edit-text")
+                }
                     .frame(width: 128)
             }
             .buttonStyle(.bordered)
@@ -234,11 +270,12 @@ struct EntryDetailView: View {
                 dismiss()
             } label: {
                 Text("Save")
+                    .font(selectedFontDesignPreference.font(.body))
                     .frame(width: 128)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled(entry.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(draftBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 24)
         .padding(.top, 6)
@@ -263,6 +300,15 @@ struct EntryDetailView: View {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
 
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+
+    private func modeSelectionBackground(_ isSelected: Bool) -> Color {
+        guard isSelected else { return .clear }
+        return selectedTheme.colorScheme == .dark ? selectedTheme.primaryColor : Color.white.opacity(0.90)
+    }
+
     private func beginEditing() {
         isRecordingMode = false
         isEditing = true
@@ -272,10 +318,14 @@ struct EntryDetailView: View {
     private func finishEditing() {
         focusedField = nil
         isEditing = false
-        saveChanges()
     }
 
     private func saveChanges() {
+        entry.title = draftTitle
+        entry.body = draftBody
+        entry.journalDate = draftJournalDate
+        entry.emoji = draftEmoji
+        entry.language = draftLanguage
         entry.updatedAt = .now
         try? modelContext.save()
     }
@@ -290,14 +340,13 @@ struct EntryDetailView: View {
         let appendedText = draft.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !appendedText.isEmpty else { return }
 
-        let existingBody = entry.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        entry.body = existingBody.isEmpty ? appendedText : "\(existingBody)\n\n\(appendedText)"
-        if entry.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || entry.title == "Untitled Journal" {
-            entry.title = processor.makeTitle(from: entry.body, language: draft.language)
+        let existingBody = draftBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        draftBody = existingBody.isEmpty ? appendedText : "\(existingBody)\n\n\(appendedText)"
+        if draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draftTitle == "Untitled Journal" {
+            draftTitle = processor.makeTitle(from: draftBody, language: draft.language)
         }
-        entry.language = draft.language
-        entry.emoji = processor.moodEmoji(from: entry.body, language: draft.language)
+        draftLanguage = draft.language
+        draftEmoji = processor.moodEmoji(from: draftBody, language: draft.language)
         isRecordingMode = false
-        saveChanges()
     }
 }

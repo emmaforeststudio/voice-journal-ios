@@ -21,6 +21,13 @@ final class RecorderViewModel: ObservableObject {
     private var recorderObservation: AnyCancellable?
     private var isLoadingPreview = false
     private var isLivePreviewEnabled = true
+    private let firstPreviewChunkDuration: TimeInterval = 5
+    private let previewChunkDuration: TimeInterval = 10
+    private let previewChunkOverlap: TimeInterval = 1
+    private var previewSessionID = UUID()
+    private var previewSequence = 0
+    private var lastPreviewChunkEnd: TimeInterval = 0
+    private var nextPreviewChunkEnd: TimeInterval = 10
 
     init() {
         recorderObservation = recorder.objectWillChange
@@ -65,6 +72,7 @@ final class RecorderViewModel: ObservableObject {
         errorMessage = nil
         liveTranscript = ""
         livePreviewNotice = nil
+        resetPreviewSession()
         isStartingRecording = true
         Task {
             defer { isStartingRecording = false }
@@ -74,7 +82,6 @@ final class RecorderViewModel: ObservableObject {
                 startRecordingTimer()
                 if isLivePreviewEnabled {
                     startPreviewTimer()
-                    scheduleInitialPreview()
                 }
                 objectWillChange.send()
             } catch {
@@ -167,8 +174,8 @@ final class RecorderViewModel: ObservableObject {
         isLivePreviewEnabled = isEnabled
         if isRecording {
             if isEnabled {
+                resetPreviewSession(startingAt: recorder.currentRecordingTime)
                 startPreviewTimer()
-                scheduleInitialPreview()
             } else {
                 stopPreviewTimer()
                 livePreviewNotice = nil
@@ -197,24 +204,24 @@ final class RecorderViewModel: ObservableObject {
 
     private func startPreviewTimer() {
         previewTimer?.cancel()
-        previewTimer = Timer.publish(every: 3, on: .main, in: .common)
+        previewTimer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 self?.refreshLivePreview()
             }
     }
 
-    private func scheduleInitialPreview() {
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            refreshLivePreview()
-        }
-    }
-
     private func stopPreviewTimer() {
         previewTimer?.cancel()
         previewTimer = nil
         isLoadingPreview = false
+    }
+
+    private func resetPreviewSession(startingAt startTime: TimeInterval = 0) {
+        previewSessionID = UUID()
+        previewSequence = 0
+        lastPreviewChunkEnd = max(0, startTime)
+        nextPreviewChunkEnd = lastPreviewChunkEnd + firstPreviewChunkDuration
     }
 
     private func makeDraftFromLivePreview(_ livePreviewTranscript: String, notice: String) -> JournalDraft? {
@@ -241,20 +248,93 @@ final class RecorderViewModel: ObservableObject {
     }
 
     private func refreshLivePreview() {
-        guard isLivePreviewEnabled, !isLoadingPreview, isRecording, let url = recorder.currentRecordingURL else { return }
+        guard isLivePreviewEnabled, !isLoadingPreview, isRecording else { return }
+        let currentTime = recorder.currentRecordingTime
+        guard currentTime >= nextPreviewChunkEnd else { return }
+
+        let chunkStartTime = max(0, lastPreviewChunkEnd - previewChunkOverlap)
+        let chunkEndTime = nextPreviewChunkEnd
         isLoadingPreview = true
 
         Task {
             defer { isLoadingPreview = false }
             do {
-                let transcript = try await openAIJournalService.previewTranscript(from: url)
-                if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    liveTranscript = transcript
+                guard let chunkData = try recorder.audioChunkData(from: chunkStartTime, to: chunkEndTime) else {
+                    return
+                }
+                let transcript = try await openAIJournalService.previewTranscript(
+                    fromAudioData: chunkData,
+                    sessionID: previewSessionID,
+                    sequence: previewSequence,
+                    chunkStartTime: chunkStartTime,
+                    chunkEndTime: chunkEndTime
+                )
+                let mergedTranscript = mergedLiveTranscript(existing: liveTranscript, incoming: transcript)
+                if !mergedTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    liveTranscript = mergedTranscript
                     livePreviewNotice = nil
                 }
+                lastPreviewChunkEnd = chunkEndTime
+                nextPreviewChunkEnd = chunkEndTime + previewChunkDuration
+                previewSequence += 1
             } catch {
                 livePreviewNotice = "Live preview cannot reach the transcription service. Your audio is still recording."
             }
         }
+    }
+
+    private func mergedLiveTranscript(existing: String, incoming: String) -> String {
+        let previous = existing.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.isEmpty else { return previous }
+        guard !previous.isEmpty else { return next }
+
+        if normalizedPreviewText(next).hasPrefix(normalizedPreviewText(previous)) || next.count >= previous.count * 2 {
+            return next
+        }
+
+        if previous.contains(next) {
+            return previous
+        }
+
+        let previousWords = previewWordSpans(in: previous)
+        let nextWords = previewWordSpans(in: next)
+        let maxOverlap = min(20, previousWords.count, nextWords.count)
+
+        if maxOverlap > 0 {
+            for count in stride(from: maxOverlap, through: 1, by: -1) {
+                let previousSlice = previousWords.suffix(count).map(\.text)
+                let nextSlice = nextWords.prefix(count).map(\.text)
+                if previousSlice.elementsEqual(nextSlice), let end = nextWords.prefix(count).last?.end {
+                    return joinedPreviewTranscript(previous, String(next[end...]))
+                }
+            }
+        }
+
+        return joinedPreviewTranscript(previous, next)
+    }
+
+    private func previewWordSpans(in text: String) -> [(text: String, end: String.Index)] {
+        text.matches(of: /[\p{Letter}\p{Number}]+/).map { match in
+            (
+                text: normalizedPreviewText(String(match.output)),
+                end: match.range.upperBound
+            )
+        }
+    }
+
+    private func normalizedPreviewText(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func joinedPreviewTranscript(_ previous: String, _ incoming: String) -> String {
+        let next = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.isEmpty else { return previous }
+
+        let punctuation = CharacterSet(charactersIn: ".,!?;:'\")]}")
+        if next.unicodeScalars.first.map({ punctuation.contains($0) }) == true {
+            return previous + next
+        }
+        return previous + " " + next
     }
 }
