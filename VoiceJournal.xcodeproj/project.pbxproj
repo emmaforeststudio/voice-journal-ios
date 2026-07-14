@@ -26,6 +26,7 @@
 		100000000000000000000119 /* NumericPasswordKeypadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000220 /* NumericPasswordKeypadView.swift */; };
 		100000000000000000000114 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000214 /* Assets.xcassets */; };
 		100000000000000000000120 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000221 /* PrivacyInfo.xcprivacy */; };
+		100000000000000000000121 /* FutureLetterEmailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000222 /* FutureLetterEmailService.swift */; };
 		100000000000000000000115 /* JournalProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* JournalProcessorTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -61,6 +62,7 @@
 		100000000000000000000215 /* JournalProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalProcessorTests.swift; sourceTree = "<group>"; };
 		100000000000000000000216 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		100000000000000000000221 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		100000000000000000000222 /* FutureLetterEmailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureLetterEmailService.swift; sourceTree = "<group>"; };
 		100000000000000000000501 /* VoiceJournal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoiceJournal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000502 /* VoiceJournalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoiceJournalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -122,6 +124,7 @@
 				100000000000000000000206 /* SpeechTranscriber.swift */,
 				100000000000000000000217 /* OpenAIJournalService.swift */,
 				100000000000000000000218 /* AppLockAuthenticator.swift */,
+				100000000000000000000222 /* FutureLetterEmailService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -293,6 +296,7 @@
 				100000000000000000000113 /* EntryDetailView.swift in Sources */,
 				100000000000000000000118 /* LockableRootView.swift in Sources */,
 				100000000000000000000119 /* NumericPasswordKeypadView.swift in Sources */,
+				100000000000000000000121 /* FutureLetterEmailService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -58,9 +58,31 @@ Reason: The app does not include a third-party crash reporting or analytics SDK.
 
 ### Contact Info
 
-Recommended answer for version 1.0: No.
+Data type: Email Address
 
-Reason: The app does not collect contact information in-app. The support page uses a direct email link instead of a support form.
+Collected: Yes, only when the user chooses email delivery for a future letter.
+
+Linked to user: Yes. Disclose conservatively because the address identifies the email recipient and is associated with a device credential.
+
+Used for tracking: No.
+
+Purpose: App Functionality.
+
+Notes: The address is verified before scheduling. D1 stores a one-way email hash for verification status; the full address is encrypted only with a pending letter and is removed from the stored payload after delivery or permanent failure. Canceling or deleting the letter removes its remote record.
+
+### User Content: Future Letters
+
+Data type: Other User Content
+
+Collected: Yes, only when email delivery is selected.
+
+Linked to user: Yes. Disclose conservatively because the content is scheduled to a verified email address.
+
+Used for tracking: No.
+
+Purpose: App Functionality.
+
+Notes: The title and letter body are encrypted in Cloudflare D1 while awaiting delivery and sent through Resend at the selected time. Full stored content is replaced with status-only data after delivery or permanent failure; canceling or deleting a letter removes its remote record. In-app future letters remain local to the device.
 
 ### Usage Data
 
@@ -77,6 +99,7 @@ The following are stored locally on device:
 - theme/font preferences
 - lock preferences
 - feature request board data
+- in-app future letters
 
 Local-only data may not need to be reported as collected if it is not transmitted off device, but review Apple's current App Privacy instructions when submitting.
 
@@ -87,3 +110,4 @@ Local-only data may not need to be reported as collected if it is not transmitte
 - No support request form at launch.
 - No custom analytics or crash reporting SDK at launch.
 - Technical backend logs may be used only for debugging, reliability, and security, and should not intentionally include raw audio, full transcripts, or journal entries.
+- Email delivery is available without payment during the selected beta. The planned public paid tier and one-week no-commitment voice trial are not active in this build.

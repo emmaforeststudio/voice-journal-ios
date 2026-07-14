@@ -3,3 +3,14 @@ main = "worker/index.mjs"
 compatibility_date = "2026-07-12"
 workers_dev = true
 preview_urls = true
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flara-day-email"
+database_id = "c0c68bdb-9b6d-4ae6-b60d-5b0588bbc660"
+
+# Required secrets: RESEND_API_KEY, RESEND_FROM_EMAIL,
+# LETTER_ENCRYPTION_KEY, and EMAIL_AUTH_SECRET.

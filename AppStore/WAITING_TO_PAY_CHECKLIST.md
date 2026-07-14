@@ -23,11 +23,12 @@ Use this while delaying Apple Developer Program payment.
 - Test Face ID/password lock.
 - Check Settings > Connection.
 - Watch Cloudflare usage for request failures or quota concerns.
+- After Resend setup, verify and schedule a future-letter email, then test delivery and cancellation.
 
 ## Do Not Add Before First TestFlight Unless Needed
 
 - User accounts
-- Subscriptions
+- Subscriptions or the one-week no-commitment voice trial
 - Third-party analytics
 - Crash reporting SDKs
 - Support request forms

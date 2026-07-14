@@ -28,7 +28,16 @@ Review the files in `AppStore/`, starting with `AppStore/REVIEW_TOMORROW.md`.
 - App privacy answer draft is ready for a no-account, no-subscription, no-analytics version 1.0.
 - Support and privacy pages are deployed.
 - Backend is deployed on the studio Cloudflare account.
+- D1, Cron delivery, encrypted future-letter storage, and the iOS email flow are implemented.
+- Resend remains disabled until a studio Resend account, verified sender domain, and API key are configured.
 - Source code is pushed to the studio GitHub repository.
+
+## Beta product decision
+
+- The selected friends beta has no subscriptions or paywall.
+- Voice transcription and future-letter email are unlocked for beta feedback after the email provider is configured.
+- The later public version will use one Plus tier.
+- The preferred public voice trial is a one-week no-commitment trial, with no advance subscription authorization. Trial enforcement and StoreKit access will be designed after the beta limit is chosen.
 
 ## Blocked until Apple Developer payment
 

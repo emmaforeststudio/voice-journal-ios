@@ -1,5 +1,6 @@
 import { createJournalHandler } from "../journal-core.mjs";
 import { privacyPolicyHtml, supportHtml } from "./public-pages.mjs";
+import { handleFutureEmailRequest, processDueFutureEmails } from "./future-email.mjs";
 
 export default {
   async fetch(request, env) {
@@ -12,11 +13,18 @@ export default {
       return htmlResponse(privacyPolicyHtml);
     }
 
+    const futureEmailResponse = await handleFutureEmailRequest(request, env);
+    if (futureEmailResponse) return futureEmailResponse;
+
     const handleJournalRequest = createJournalHandler({
       apiKey: env.OPENAI_API_KEY,
       fetchImpl: fetch,
     });
     return handleJournalRequest(request);
+  },
+
+  async scheduled(controller, env, context) {
+    context.waitUntil(processDueFutureEmails(env, controller.scheduledTime));
   },
 };
 

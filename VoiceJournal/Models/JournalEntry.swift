@@ -46,6 +46,9 @@ final class FutureLetter {
     var deliveryDate: Date
     var deliveryMethodRawValue: String
     var notificationIdentifier: String?
+    var recipientEmail: String?
+    var remoteDeliveryStatusRawValue: String?
+    var remoteDeliveredAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -61,6 +64,9 @@ final class FutureLetter {
         deliveryDate: Date,
         deliveryMethod: FutureLetterDeliveryMethod,
         notificationIdentifier: String? = nil,
+        recipientEmail: String? = nil,
+        remoteDeliveryStatus: FutureLetterEmailStatus? = nil,
+        remoteDeliveredAt: Date? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -70,6 +76,9 @@ final class FutureLetter {
         self.deliveryDate = deliveryDate
         self.deliveryMethodRawValue = deliveryMethod.rawValue
         self.notificationIdentifier = notificationIdentifier
+        self.recipientEmail = recipientEmail
+        self.remoteDeliveryStatusRawValue = remoteDeliveryStatus?.rawValue
+        self.remoteDeliveredAt = remoteDeliveredAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

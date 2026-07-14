@@ -79,7 +79,7 @@ export const privacyPolicyHtml = `<!doctype html>
 <body>
   <main>
     <h1>Flara Day Privacy Policy</h1>
-    <p class="muted">Effective date: July 13, 2026</p>
+    <p class="muted">Effective date: July 14, 2026</p>
 
     <h2>Overview</h2>
     <p>Flara Day is a personal voice journal app. Your journal entries are personal, and the app is designed to avoid collecting more information than is needed to provide transcription, journal drafting, and app support.</p>
@@ -87,12 +87,17 @@ export const privacyPolicyHtml = `<!doctype html>
     <h2>Information Processed</h2>
     <p>When you record a journal entry, audio may be sent to the Flara Day backend and OpenAI for transcription and journal draft processing. The app may also process the resulting transcript and generated journal text so it can show your entry in the app.</p>
     <p>Your saved journal entries are stored on your device unless you choose to export or share them using features provided by the app or iOS.</p>
+    <p>Future letters scheduled as in-app notifications remain on your device. If you choose email delivery, Flara Day processes a verified recipient email address, the letter title and body, and the requested delivery time.</p>
 
     <h2>How Information Is Used</h2>
     <p>Audio, transcripts, and journal text are used to provide the app's core features, including transcription, live preview, journal cleanup, and journal organization. We do not use your journal content for advertising.</p>
 
     <h2>Third-Party Processing</h2>
     <p>Flara Day uses OpenAI services to process audio and text for transcription and journal drafting. The Flara Day backend is hosted on Cloudflare Workers so the OpenAI API key does not need to be stored in the iPhone app.</p>
+    <p>For future-letter email delivery, Cloudflare D1 stores the encrypted pending letter and Resend delivers verification codes and the scheduled email.</p>
+
+    <h2>Future-Letter Retention</h2>
+    <p>A one-way representation of a verified email address and delivery status may be retained to operate and secure the service. The full email address and letter content are encrypted while a letter is waiting for delivery. After delivery or permanent failure, the full stored letter is replaced with status-only data. Canceling or deleting a letter removes its remote record.</p>
 
     <h2>Logs</h2>
     <p>Technical logs may be used to monitor reliability, debug errors, and protect the service. Logs should not intentionally include raw audio, full transcripts, or journal entries.</p>

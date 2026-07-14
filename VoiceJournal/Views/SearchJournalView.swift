@@ -393,6 +393,7 @@ struct InsightsJournalView: View {
 
 private struct VoiceJournalSettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var futureLetters: [FutureLetter]
     let entries: [JournalEntry]
     @Binding var exportURL: URL?
     let backendStatus: BackendStatus
@@ -408,6 +409,7 @@ private struct VoiceJournalSettingsView: View {
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @AppStorage("insightsMemoryCardMode") private var insightsMemoryCardMode = InsightsMemoryCardMode.onThisDay.rawValue
     @AppStorage("showLivePreview") private var showLivePreview = true
+    @AppStorage("futureLetterEmailAddress") private var futureLetterEmailAddress = ""
 
     @State private var requestedFaceIDLock = false
     @State private var requestedPasswordLock = false
@@ -419,6 +421,7 @@ private struct VoiceJournalSettingsView: View {
     @State private var passwordDraft = ""
     @State private var importMessage: String?
     @State private var lockMessage: String?
+    @State private var accountDeletionError: String?
 
     var body: some View {
         Form {
@@ -551,7 +554,7 @@ private struct VoiceJournalSettingsView: View {
                 Button(role: .destructive) {
                     isShowingDeleteAccountConfirmation = true
                 } label: {
-                    SettingsRowLabel(title: "Delete Account", imageName: "icon-delete-account", foregroundColor: .red)
+                    SettingsRowLabel(title: "Delete All App Data", imageName: "icon-delete-account", foregroundColor: .red)
                 }
                 .listRowBackground(AppThemeCardBackground())
             }
@@ -608,13 +611,21 @@ private struct VoiceJournalSettingsView: View {
         } message: {
             Text("This only deletes journals stored in Flara Day. This cannot be undone.")
         }
-        .confirmationDialog("Delete account?", isPresented: $isShowingDeleteAccountConfirmation, titleVisibility: .visible) {
-            Button("Delete Account and Journals", role: .destructive) {
-                deleteAccount()
+        .confirmationDialog("Delete all app data?", isPresented: $isShowingDeleteAccountConfirmation, titleVisibility: .visible) {
+            Button("Delete All App Data", role: .destructive) {
+                Task { await deleteAllAppData() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This clears the local profile and deletes all journals stored in Flara Day. This cannot be undone.")
+            Text("This deletes local journals and future letters, and cancels scheduled email letters. This cannot be undone.")
+        }
+        .alert("Unable to Delete All Data", isPresented: Binding(
+            get: { accountDeletionError != nil },
+            set: { if !$0 { accountDeletionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(accountDeletionError ?? "Please try again.")
         }
     }
 
@@ -694,14 +705,36 @@ private struct VoiceJournalSettingsView: View {
         profileDisplayName = ""
     }
 
-    private func deleteAccount() {
+    @MainActor
+    private func deleteAllAppData() async {
+        var cloudDeletionError: Error?
+        do {
+            try await FutureLetterEmailService().deleteDeviceData()
+        } catch {
+            cloudDeletionError = error
+        }
+
+        let notificationIdentifiers = futureLetters.compactMap(\.notificationIdentifier)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: notificationIdentifiers)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: notificationIdentifiers)
+        for letter in futureLetters {
+            modelContext.delete(letter)
+        }
+
+        UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "")
         logOutProfile()
         faceIDLockEnabled = false
         requestedFaceIDLock = false
         passwordLockEnabled = false
         requestedPasswordLock = false
         appLockPassword = ""
+        futureLetterEmailAddress = ""
         deleteAllJournals()
+        try? modelContext.save()
+
+        if let cloudDeletionError {
+            accountDeletionError = "Local data was deleted, but scheduled email data could not be removed from the server yet. Reconnect and choose Delete All App Data again. \(cloudDeletionError.localizedDescription)"
+        }
     }
 
     private var selectedTheme: AppColorTheme {
@@ -2274,11 +2307,17 @@ private enum FutureLetterCollection: String, Identifiable {
     func includes(_ letter: FutureLetter, now: Date) -> Bool {
         switch self {
         case .draft:
-            letter.notificationIdentifier == nil
+            return letter.notificationIdentifier == nil
         case .scheduled:
-            letter.notificationIdentifier != nil && letter.deliveryDate > now
+            if letter.deliveryMethod == .email {
+                return letter.notificationIdentifier != nil && letter.remoteDeliveryStatusRawValue != FutureLetterEmailStatus.sent.rawValue
+            }
+            return letter.notificationIdentifier != nil && letter.deliveryDate > now
         case .delivered:
-            letter.notificationIdentifier != nil && letter.deliveryDate <= now
+            if letter.deliveryMethod == .email {
+                return letter.remoteDeliveryStatusRawValue == FutureLetterEmailStatus.sent.rawValue
+            }
+            return letter.notificationIdentifier != nil && letter.deliveryDate <= now
         }
     }
 
@@ -2291,6 +2330,7 @@ private struct FutureLetterComposerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("futureLetterEmailAddress") private var emailAddress = ""
     @Query(sort: \FutureLetter.deliveryDate, order: .forward) private var letters: [FutureLetter]
     @StateObject private var recorder = AudioRecorder()
     @State private var title = ""
@@ -2302,6 +2342,7 @@ private struct FutureLetterComposerView: View {
     @State private var isProcessingRecording = false
     @State private var compositionMode = FutureLetterCompositionMode.record
     @State private var message: String?
+    @State private var verifiedEmail: String?
     @State private var currentDate = Date()
     @FocusState private var focusedField: FutureLetterFocusedField?
 
@@ -2329,6 +2370,7 @@ private struct FutureLetterComposerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             try? await recorder.prepare()
+            await refreshEmailStatuses()
         }
         .navigationDestination(item: $selectedCollection) { collection in
             FutureLetterListView(collection: collection)
@@ -2452,7 +2494,11 @@ private struct FutureLetterComposerView: View {
                     .foregroundStyle(.secondary)
 
                 deliveryMethodButton(.inAppNotification, subtitle: "Schedule a private local reminder on this iPhone.", isEnabled: true)
-                deliveryMethodButton(.email, subtitle: "Requires an email delivery service before launch.", isEnabled: false)
+                deliveryMethodButton(.email, subtitle: "Deliver the full letter to a verified email address.", isEnabled: true)
+
+                if deliveryMethod == .email {
+                    FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
+                }
             }
         }
         .padding(16)
@@ -2516,7 +2562,7 @@ private struct FutureLetterComposerView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!canSave)
+            .disabled(!canSchedule)
         }
     }
 
@@ -2557,11 +2603,37 @@ private struct FutureLetterComposerView: View {
         letters.lazy.filter { collection.includes($0, now: currentDate) }.count
     }
 
+    @MainActor
+    private func refreshEmailStatuses() async {
+        var changed = false
+        for letter in letters where letter.deliveryMethod == .email && letter.notificationIdentifier != nil {
+            guard let response = try? await FutureLetterEmailService().status(letterID: letter.id) else { continue }
+            if letter.remoteDeliveryStatusRawValue != response.status.rawValue {
+                letter.remoteDeliveryStatusRawValue = response.status.rawValue
+                changed = true
+            }
+            if letter.remoteDeliveredAt != response.deliveredDate {
+                letter.remoteDeliveredAt = response.deliveredDate
+                changed = true
+            }
+        }
+        if changed {
+            try? modelContext.save()
+            currentDate = Date()
+        }
+    }
+
     private var canSave: Bool {
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        deliveryMethod == .inAppNotification &&
         !isRecording &&
         !isProcessingRecording
+    }
+
+    private var canSchedule: Bool {
+        canSave && (
+            deliveryMethod == .inAppNotification ||
+            normalizedEmail(verifiedEmail) == normalizedEmail(emailAddress)
+        )
     }
 
     private func handleCompositionModeTap(_ mode: FutureLetterCompositionMode) {
@@ -2640,7 +2712,8 @@ private struct FutureLetterComposerView: View {
             title: trimmedTitle,
             body: trimmedBody,
             deliveryDate: deliveryDate,
-            deliveryMethod: deliveryMethod
+            deliveryMethod: deliveryMethod,
+            recipientEmail: deliveryMethod == .email ? normalizedEmail(emailAddress) : nil
         )
 
         Task {
@@ -2648,11 +2721,17 @@ private struct FutureLetterComposerView: View {
                 var resultMessage = "Letter saved."
                 if shouldSchedule {
                     do {
-                        let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
-                        letter.notificationIdentifier = notificationID
+                        if deliveryMethod == .email {
+                            let status = try await FutureLetterEmailService().schedule(letter: letter, email: emailAddress)
+                            letter.notificationIdentifier = "email-\(letter.id.uuidString.lowercased())"
+                            letter.remoteDeliveryStatusRawValue = status.rawValue
+                        } else {
+                            let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                            letter.notificationIdentifier = notificationID
+                        }
                         resultMessage = "Letter scheduled."
                     } catch {
-                        resultMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                        resultMessage = "Letter saved as a draft. It was not scheduled: \(error.localizedDescription)"
                     }
                 }
 
@@ -2669,6 +2748,147 @@ private struct FutureLetterComposerView: View {
                 message = error.localizedDescription
             }
         }
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct FutureLetterEmailSetupView: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @Binding var email: String
+    @Binding var verifiedEmail: String?
+    @State private var verificationCode = ""
+    @State private var didRequestCode = false
+    @State private var isWorking = false
+    @State private var message: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case email
+        case code
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("Email address", text: $email)
+                .font(selectedFontDesignPreference.font(.body))
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focusedField, equals: .email)
+                .padding(12)
+                .background(AppThemeBackground())
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            if isCurrentEmailVerified {
+                Label("Email verified", systemImage: "checkmark.circle.fill")
+                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                    .foregroundStyle(.green)
+            } else {
+                Button {
+                    requestVerificationCode()
+                } label: {
+                    Label(didRequestCode ? "Resend Code" : "Send Verification Code", systemImage: "paperplane")
+                        .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                }
+                .disabled(isWorking || normalizedEmail(email).isEmpty)
+
+                if didRequestCode {
+                    HStack(spacing: 10) {
+                        TextField("6-digit code", text: $verificationCode)
+                            .font(selectedFontDesignPreference.font(.body))
+                            .keyboardType(.numberPad)
+                            .textContentType(.oneTimeCode)
+                            .focused($focusedField, equals: .code)
+                            .padding(12)
+                            .background(AppThemeBackground())
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .onChange(of: verificationCode) { _, newValue in
+                                verificationCode = String(newValue.filter(\.isNumber).prefix(6))
+                            }
+
+                        Button("Verify") {
+                            confirmVerificationCode()
+                        }
+                        .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isWorking || verificationCode.count != 6)
+                    }
+                }
+            }
+
+            if isWorking {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            if let message {
+                Text(message)
+                    .font(selectedFontDesignPreference.font(.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: email) { _, newValue in
+            if normalizedEmail(newValue) != normalizedEmail(verifiedEmail) {
+                verifiedEmail = nil
+            }
+            verificationCode = ""
+            didRequestCode = false
+            message = nil
+        }
+        .task(id: normalizedEmail(email)) {
+            await refreshVerificationStatus()
+        }
+    }
+
+    private var isCurrentEmailVerified: Bool {
+        let normalized = normalizedEmail(email)
+        return !normalized.isEmpty && normalized == normalizedEmail(verifiedEmail)
+    }
+
+    private func requestVerificationCode() {
+        focusedField = nil
+        isWorking = true
+        message = nil
+        Task {
+            do {
+                try await FutureLetterEmailService().requestVerification(email: email)
+                didRequestCode = true
+                message = "We sent a six-digit code to your email."
+                focusedField = .code
+            } catch {
+                message = error.localizedDescription
+            }
+            isWorking = false
+        }
+    }
+
+    private func confirmVerificationCode() {
+        focusedField = nil
+        isWorking = true
+        message = nil
+        Task {
+            do {
+                try await FutureLetterEmailService().confirmVerification(email: email, code: verificationCode)
+                verifiedEmail = normalizedEmail(email)
+                verificationCode = ""
+                message = "This email is ready for future letters."
+            } catch {
+                message = error.localizedDescription
+            }
+            isWorking = false
+        }
+    }
+
+    private func refreshVerificationStatus() async {
+        let candidate = normalizedEmail(email)
+        guard !candidate.isEmpty else { return }
+        guard (try? await FutureLetterEmailService().isVerified(email: candidate)) == true else { return }
+        verifiedEmail = candidate
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -2722,6 +2942,7 @@ private struct FutureLetterListView: View {
     let collection: FutureLetterCollection
     @State private var selectedLetter: FutureLetter?
     @State private var currentDate = Date()
+    @State private var deletionError: String?
 
     var body: some View {
         ScrollView {
@@ -2738,7 +2959,9 @@ private struct FutureLetterListView: View {
                             title: letterTitle(letter),
                             displayDate: collection.displayDate(for: letter),
                             onOpen: { selectedLetter = letter },
-                            onDelete: { deleteLetter(letter) }
+                            onDelete: {
+                                Task { await deleteLetter(letter) }
+                            }
                         )
                     }
                 }
@@ -2748,6 +2971,9 @@ private struct FutureLetterListView: View {
         .background(AppThemeBackground())
         .navigationTitle(collection.title)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await refreshEmailStatuses()
+        }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { date in
             currentDate = date
         }
@@ -2758,6 +2984,14 @@ private struct FutureLetterListView: View {
             case .scheduled, .delivered:
                 FutureLetterReadOnlyView(letter: letter, collection: collection)
             }
+        }
+        .alert("Unable to Delete Letter", isPresented: Binding(
+            get: { deletionError != nil },
+            set: { if !$0 { deletionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionError ?? "Please try again.")
         }
     }
 
@@ -2773,8 +3007,17 @@ private struct FutureLetterListView: View {
         }
     }
 
-    private func deleteLetter(_ letter: FutureLetter) {
-        if let notificationIdentifier = letter.notificationIdentifier {
+    @MainActor
+    private func deleteLetter(_ letter: FutureLetter) async {
+        if letter.deliveryMethod == .email, letter.notificationIdentifier != nil {
+            do {
+                try await FutureLetterEmailService().cancel(letterID: letter.id)
+            } catch {
+                deletionError = error.localizedDescription
+                await refreshEmailStatuses()
+                return
+            }
+        } else if let notificationIdentifier = letter.notificationIdentifier {
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationIdentifier])
         }
@@ -2783,6 +3026,26 @@ private struct FutureLetterListView: View {
         }
         modelContext.delete(letter)
         try? modelContext.save()
+    }
+
+    @MainActor
+    private func refreshEmailStatuses() async {
+        var changed = false
+        for letter in letters where letter.deliveryMethod == .email && letter.notificationIdentifier != nil {
+            guard let response = try? await FutureLetterEmailService().status(letterID: letter.id) else { continue }
+            if letter.remoteDeliveryStatusRawValue != response.status.rawValue {
+                letter.remoteDeliveryStatusRawValue = response.status.rawValue
+                changed = true
+            }
+            if letter.remoteDeliveredAt != response.deliveredDate {
+                letter.remoteDeliveredAt = response.deliveredDate
+                changed = true
+            }
+        }
+        if changed {
+            try? modelContext.save()
+            currentDate = Date()
+        }
     }
 
     private func letterTitle(_ letter: FutureLetter) -> String {
@@ -2957,7 +3220,7 @@ private struct FutureLetterReadOnlyView: View {
                 Text("Delivered Time")
                     .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
-                Text(letter.deliveryDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year().hour().minute()))
+                Text((letter.remoteDeliveredAt ?? letter.deliveryDate).formatted(.dateTime.weekday(.wide).month(.wide).day().year().hour().minute()))
                     .font(selectedFontDesignPreference.font(.body, weight: .semibold))
                     .foregroundStyle(.primary)
             }
@@ -2989,6 +3252,8 @@ private struct FutureLetterDetailView: View {
     @State private var bodyText = ""
     @State private var deliveryDate = Date()
     @State private var deliveryMethod = FutureLetterDeliveryMethod.inAppNotification
+    @State private var emailAddress = ""
+    @State private var verifiedEmail: String?
     @State private var isRecording = false
     @State private var isProcessingRecording = false
     @State private var compositionMode = FutureLetterCompositionMode.type
@@ -3138,7 +3403,11 @@ private struct FutureLetterDetailView: View {
                     .foregroundStyle(.secondary)
 
                 deliveryMethodButton(.inAppNotification, subtitle: "Schedule a private local reminder on this iPhone.", isEnabled: true)
-                deliveryMethodButton(.email, subtitle: "Requires an email delivery service before launch.", isEnabled: false)
+                deliveryMethodButton(.email, subtitle: "Deliver the full letter to a verified email address.", isEnabled: true)
+
+                if deliveryMethod == .email {
+                    FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
+                }
             }
         }
         .padding(16)
@@ -3202,15 +3471,21 @@ private struct FutureLetterDetailView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!canSave)
+            .disabled(!canSchedule)
         }
     }
 
     private var canSave: Bool {
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        deliveryMethod == .inAppNotification &&
         !isRecording &&
         !isProcessingRecording
+    }
+
+    private var canSchedule: Bool {
+        canSave && (
+            deliveryMethod == .inAppNotification ||
+            normalizedEmail(verifiedEmail) == normalizedEmail(emailAddress)
+        )
     }
 
     private func loadLetter() {
@@ -3218,6 +3493,7 @@ private struct FutureLetterDetailView: View {
         bodyText = letter.body
         deliveryDate = max(letter.deliveryDate, Date())
         deliveryMethod = letter.deliveryMethod
+        emailAddress = letter.recipientEmail ?? ""
     }
 
     private func handleCompositionModeTap(_ mode: FutureLetterCompositionMode) {
@@ -3299,6 +3575,9 @@ private struct FutureLetterDetailView: View {
         letter.body = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         letter.deliveryDate = deliveryDate
         letter.deliveryMethod = deliveryMethod
+        letter.recipientEmail = deliveryMethod == .email ? normalizedEmail(emailAddress) : nil
+        letter.remoteDeliveryStatusRawValue = nil
+        letter.remoteDeliveredAt = nil
         letter.updatedAt = Date()
 
         Task {
@@ -3306,11 +3585,17 @@ private struct FutureLetterDetailView: View {
                 var resultMessage = "Letter saved."
                 if shouldSchedule {
                     do {
-                        let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
-                        letter.notificationIdentifier = notificationID
+                        if deliveryMethod == .email {
+                            let status = try await FutureLetterEmailService().schedule(letter: letter, email: emailAddress)
+                            letter.notificationIdentifier = "email-\(letter.id.uuidString.lowercased())"
+                            letter.remoteDeliveryStatusRawValue = status.rawValue
+                        } else {
+                            let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
+                            letter.notificationIdentifier = notificationID
+                        }
                         resultMessage = "Letter scheduled."
                     } catch {
-                        resultMessage = "Letter saved. Notification was not scheduled: \(error.localizedDescription)"
+                        resultMessage = "Letter saved as a draft. It was not scheduled: \(error.localizedDescription)"
                     }
                 }
 
@@ -3328,6 +3613,12 @@ private struct FutureLetterDetailView: View {
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
     }
+}
+
+private func normalizedEmail(_ value: String?) -> String {
+    (value ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
 }
 
 enum FutureLetterNotificationScheduler {

@@ -113,7 +113,8 @@ private struct FutureLetterNotificationSyncView<Content: View>: View {
         content
             .task(id: scenePhase) {
                 guard scenePhase == .active else { return }
-                if await FutureLetterNotificationScheduler.synchronize(letters: letters) {
+                let localLetters = letters.filter { $0.deliveryMethod == .inAppNotification }
+                if await FutureLetterNotificationScheduler.synchronize(letters: localLetters) {
                     try? modelContext.save()
                 }
             }

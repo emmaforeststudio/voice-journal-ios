@@ -60,7 +60,7 @@
   <main>
     <div class="card">
       <h1>Flara Day Privacy Policy</h1>
-      <p class="effective">Effective date: July 13, 2026</p>
+      <p class="effective">Effective date: July 14, 2026</p>
 
       <p>Flara Day is a private voice journal app that helps you record, transcribe, and reflect on journal entries. This Privacy Policy explains what information is processed, why it is processed, and the choices you have.</p>
 
@@ -69,6 +69,7 @@
       <p><strong>Audio recordings.</strong> When you record a journal, the app temporarily processes the audio recording so it can be transcribed and turned into a draft journal entry. For cloud transcription and journal drafting, audio recordings may be sent to Flara Day's backend service and then to OpenAI for transcription and text processing.</p>
       <p><strong>Settings and preferences.</strong> Flara Day stores app preferences such as theme, font, font size, lock settings, memory card preference, and live preview preference on your device.</p>
       <p><strong>Security settings.</strong> If you enable Face ID or password lock, Flara Day uses those settings to help protect access to your journal on your device. Face ID authentication is handled by Apple; Flara Day does not receive or store your Face ID biometric data.</p>
+      <p><strong>Future letters and email addresses.</strong> Future letters scheduled as in-app notifications remain on your device. If you choose email delivery, Flara Day processes a verified recipient email address, the letter title and body, and the requested delivery time.</p>
 
       <h2>How Information Is Used</h2>
       <ul>
@@ -78,20 +79,23 @@
         <li>support live transcription preview while recording, if enabled</li>
         <li>maintain app preferences and security settings</li>
         <li>allow import, export, and deletion of journal data</li>
+        <li>verify an email address and deliver a future letter when requested</li>
       </ul>
       <p>Flara Day does not sell your journal content.</p>
 
       <h2>Cloud Processing</h2>
       <p>When cloud transcription or AI journal drafting is used, audio and text may be processed by Flara Day's backend service hosted on Cloudflare Workers and by OpenAI services for transcription and text processing.</p>
+      <p>For future-letter email delivery, Cloudflare D1 stores the encrypted pending letter and Resend delivers verification codes and the scheduled email.</p>
 
       <h2>Data Retention</h2>
       <p>Journal entries are stored on your device until you delete them or delete your account data in the app. Audio recordings are used to create transcription and journal drafts. Flara Day does not intentionally store uploaded audio recordings on its backend after processing. Cloud service providers may process request data according to their own service terms and retention practices.</p>
+      <p>A one-way representation of a verified email address and delivery status may be retained to operate and secure the future-letter service. The full email address and letter content are encrypted while a letter is waiting for delivery. After delivery or permanent failure, the full stored letter is replaced with status-only data. Canceling or deleting a letter removes its remote record.</p>
 
       <h2>Deleting Your Data</h2>
       <p>You can delete individual journal entries in the app. You can also delete all journals and local account/profile data from Settings.</p>
 
       <h2>Data Sharing</h2>
-      <p>Flara Day shares information only as needed to provide app functionality, such as sending audio or text to cloud services for transcription and journal drafting. Flara Day does not use your journal content for advertising or tracking.</p>
+      <p>Flara Day shares information only as needed to provide app functionality, such as sending audio or text for transcription and journal drafting, or sending a verified recipient address and future letter to Resend for email delivery. Flara Day does not use your journal content for advertising or tracking.</p>
 
       <h2>Tracking</h2>
       <p>Flara Day does not track you across apps or websites owned by other companies.</p>
