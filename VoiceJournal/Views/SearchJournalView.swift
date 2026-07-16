@@ -2487,9 +2487,14 @@ private struct FutureLetterComposerView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Delivery", systemImage: "clock")
+            Label {
+                Text("Delivery")
+                    .foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: "clock")
+                    .foregroundStyle(Color.accentColor)
+            }
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .foregroundStyle(.primary)
                 .imageScale(.small)
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -3505,9 +3510,14 @@ private struct FutureLetterDetailView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Delivery", systemImage: "clock")
+            Label {
+                Text("Delivery")
+                    .foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: "clock")
+                    .foregroundStyle(Color.accentColor)
+            }
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .foregroundStyle(.primary)
                 .imageScale(.small)
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -4081,9 +4091,9 @@ private struct ThemeCloudOrbitLayout: Layout {
 
     private func compactAnchors(in bounds: CGRect) -> [CGPoint] {
         let positions: [(CGFloat, CGFloat)] = [
-            (0.50, 0.34), (0.68, 0.40), (0.69, 0.60),
-            (0.50, 0.67), (0.31, 0.60), (0.31, 0.40),
-            (0.50, 0.24), (0.76, 0.50), (0.50, 0.76)
+            (0.50, 0.19), (0.70, 0.26), (0.81, 0.45),
+            (0.77, 0.68), (0.61, 0.79), (0.39, 0.79),
+            (0.23, 0.68), (0.19, 0.45), (0.30, 0.26)
         ]
         return positions.map { x, y in
             CGPoint(x: bounds.minX + bounds.width * x, y: bounds.minY + bounds.height * y)
@@ -4165,7 +4175,7 @@ private struct ThemeCloudOrbitLayout: Layout {
     }
 
     private func compactnessScore(_ point: CGPoint, preferred: CGPoint, cardCenter: CGPoint) -> CGFloat {
-        squaredDistance(point, cardCenter) + squaredDistance(point, preferred) * 0.22
+        squaredDistance(point, preferred) + squaredDistance(point, cardCenter) * 0.20
     }
 
     private func rotatedSize(_ size: CGSize, degrees: Double) -> CGSize {
