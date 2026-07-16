@@ -2905,27 +2905,101 @@ private struct FutureLetterEmailSetupView: View {
 }
 
 private struct FutureLetterDeliveryDatePicker: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @Binding var date: Date
+    @State private var activePicker: DeliveryPickerComponent?
 
     var body: some View {
-        HStack(spacing: 4) {
-            dateControl(accessibilityLabel: "Delivery date", components: .date)
-            dateControl(accessibilityLabel: "Delivery time", components: .hourAndMinute)
+        HStack(spacing: 12) {
+            selectionButton(
+                title: date.formatted(date: .abbreviated, time: .omitted),
+                component: .date
+            )
+            selectionButton(
+                title: date.formatted(date: .omitted, time: .shortened),
+                component: .time
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+        .sheet(item: $activePicker) { component in
+            NavigationStack {
+                Group {
+                    if component == .date {
+                        DatePicker(
+                            "Delivery date",
+                            selection: $date,
+                            in: Date()...,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                    } else {
+                        DatePicker(
+                            "Delivery time",
+                            selection: $date,
+                            in: Date()...,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
+                    }
+                }
+                .labelsHidden()
+                .tint(Color.accentColor)
+                .padding(.horizontal, 20)
+                .navigationTitle(component.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            activePicker = nil
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 
-    private func dateControl(accessibilityLabel: String, components: DatePickerComponents) -> some View {
-        DatePicker(
-            accessibilityLabel,
-            selection: $date,
-            in: Date()...,
-            displayedComponents: components
-        )
-        .labelsHidden()
-        .datePickerStyle(.compact)
-        .tint(Color.accentColor)
-        .fixedSize()
+    private func selectionButton(title: String, component: DeliveryPickerComponent) -> some View {
+        Button {
+            activePicker = component
+        } label: {
+            Text(title)
+                .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity, minHeight: 42)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(AppThemeBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityLabel(component.accessibilityLabel)
+        .accessibilityValue(title)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private enum DeliveryPickerComponent: String, Identifiable {
+        case date
+        case time
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .date: "Choose Date"
+            case .time: "Choose Time"
+            }
+        }
+
+        var accessibilityLabel: String {
+            switch self {
+            case .date: "Delivery date"
+            case .time: "Delivery time"
+            }
+        }
     }
 }
 
@@ -2934,33 +3008,33 @@ private struct FutureLetterDeliveryMethodPicker: View {
     @Binding var selection: FutureLetterDeliveryMethod
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
             methodButton(.inAppNotification, title: "In-App")
             methodButton(.email, title: "Email")
         }
+        .padding(4)
+        .background(AppThemeBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .accessibilityElement(children: .contain)
     }
 
-    @ViewBuilder
     private func methodButton(_ method: FutureLetterDeliveryMethod, title: String) -> some View {
-        let button = Button {
+        Button {
             selection = method
         } label: {
             Text(title)
                 .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                .foregroundStyle(selection == method ? Color.white : Color.accentColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
         }
-
-        if selection == method {
-            button
-                .buttonStyle(.borderedProminent)
-                .accessibilityAddTraits(.isSelected)
-        } else {
-            button
-                .buttonStyle(.bordered)
-        }
+        .buttonStyle(.plain)
+        .background(selection == method ? Color.accentColor : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityAddTraits(selection == method ? .isSelected : [])
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -3892,7 +3966,10 @@ private struct ThemeCloudView: View {
             return true
         }
         .sorted { first, second in
-            stableKey(for: first.theme) < stableKey(for: second.theme)
+            if first.count != second.count {
+                return first.count > second.count
+            }
+            return stableKey(for: first.theme) < stableKey(for: second.theme)
         }
         return [mainTheme] + surrounding
     }
@@ -3902,6 +3979,7 @@ private struct ThemeCloudView: View {
             ForEach(Array(arrangedThemes.enumerated()), id: \.element.theme) { index, item in
                 let isMain = index == 0
                 let weight: Font.Weight = isMain ? .bold : (index <= 2 ? .semibold : .regular)
+                let scale = cloudScale(for: item.theme)
                 Text(item.theme)
                     .font(selectedFontDesignPreference.fixedFont(
                         size: fontSize(for: item.count) + (isMain ? 4 : 0),
@@ -3911,9 +3989,11 @@ private struct ThemeCloudView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
                     .rotationEffect(.degrees(isMain ? 0 : rotation(for: item.theme)))
+                    .scaleEffect(scale)
                     .layoutValue(
                         key: ThemeCloudRotationKey.self, value: isMain ? 0 : rotation(for: item.theme)
                     )
+                    .layoutValue(key: ThemeCloudScaleKey.self, value: scale)
                     .accessibilityLabel(item.theme)
             }
         }
@@ -3932,6 +4012,24 @@ private struct ThemeCloudView: View {
     private func rotation(for theme: String) -> Double {
         let angles: [Double] = [-7, 5, -3, 8, -5, 3, 6, -8, 4]
         return -angles[Int(stableKey(for: theme) % UInt64(angles.count))]
+    }
+
+    private func cloudScale(for theme: String) -> CGFloat {
+        let densityScale: CGFloat
+        switch displayThemes.count {
+        case 0...5: densityScale = 1
+        case 6: densityScale = 0.95
+        case 7: densityScale = 0.90
+        case 8: densityScale = 0.85
+        case 9: densityScale = 0.80
+        default: densityScale = 0.75
+        }
+
+        let characterCount = max(1, theme.count)
+        let lengthScale: CGFloat = characterCount > 22
+            ? max(0.62, 22 / CGFloat(characterCount))
+            : 1
+        return min(densityScale, lengthScale)
     }
 
     private func fontSize(for count: Int) -> CGFloat {
@@ -3960,6 +4058,10 @@ private struct ThemeCloudRotationKey: LayoutValueKey {
     static let defaultValue = 0.0
 }
 
+private struct ThemeCloudScaleKey: LayoutValueKey {
+    static let defaultValue: CGFloat = 1
+}
+
 private struct ThemeCloudOrbitLayout: Layout {
     var spacing: CGFloat
 
@@ -3971,54 +4073,62 @@ private struct ThemeCloudOrbitLayout: Layout {
         guard !subviews.isEmpty else { return }
 
         let mainSize = subviews[0].sizeThatFits(.unspecified)
-        let mainCollisionSize = rotatedSize(mainSize, degrees: subviews[0][ThemeCloudRotationKey.self])
+        let mainVisualSize = scaledSize(mainSize, scale: subviews[0][ThemeCloudScaleKey.self])
+        let mainCollisionSize = rotatedSize(mainVisualSize, degrees: subviews[0][ThemeCloudRotationKey.self])
         let mainCenter = CGPoint(x: bounds.midX, y: bounds.midY)
         subviews[0].place(at: mainCenter, anchor: .center, proposal: ProposedViewSize(mainSize))
 
-        var occupied = [rect(centeredAt: mainCenter, size: mainCollisionSize).insetBy(dx: -spacing, dy: -spacing)]
-        let candidates = candidateCenters(in: bounds)
+        var occupied = [rect(centeredAt: mainCenter, size: mainCollisionSize)]
+        let anchors = orbitAnchors(in: bounds)
 
         for index in subviews.indices.dropFirst() {
             let size = subviews[index].sizeThatFits(.unspecified)
-            let collisionSize = rotatedSize(size, degrees: subviews[index][ThemeCloudRotationKey.self])
-            let orderedCandidates = rotatedCandidates(candidates, offset: (index - 1) * 3)
-            let placements = orderedCandidates.map { clampedCenter($0, size: collisionSize, in: bounds) }
-            guard let center = placements.first(where: { candidate in
-                let candidateRect = rect(centeredAt: candidate, size: collisionSize)
-                    .insetBy(dx: -spacing, dy: -spacing)
-                return occupied.allSatisfy { !$0.intersects(candidateRect) }
-            }) else {
-                subviews[index].place(
-                    at: CGPoint(x: bounds.maxX + size.width, y: bounds.maxY + size.height),
-                    anchor: .center,
-                    proposal: ProposedViewSize(size)
-                )
-                continue
-            }
+            let visualSize = scaledSize(size, scale: subviews[index][ThemeCloudScaleKey.self])
+            let collisionSize = rotatedSize(visualSize, degrees: subviews[index][ThemeCloudRotationKey.self])
+            let preferred = anchors[(index - 1) % anchors.count]
+            let placements = searchCenters(in: bounds, preferred: preferred, size: collisionSize)
+            let center = firstAvailableCenter(
+                from: placements,
+                collisionSize: collisionSize,
+                occupied: occupied
+            ) ?? leastOverlappingCenter(
+                from: placements,
+                collisionSize: collisionSize,
+                occupied: occupied
+            )
 
             subviews[index].place(at: center, anchor: .center, proposal: ProposedViewSize(size))
-            occupied.append(rect(centeredAt: center, size: collisionSize).insetBy(dx: -spacing, dy: -spacing))
+            occupied.append(rect(centeredAt: center, size: collisionSize))
         }
     }
 
-    private func candidateCenters(in bounds: CGRect) -> [CGPoint] {
+    private func orbitAnchors(in bounds: CGRect) -> [CGPoint] {
         let positions: [(CGFloat, CGFloat)] = [
-            (0.22, 0.20), (0.77, 0.77), (0.76, 0.22), (0.21, 0.75),
-            (0.50, 0.13), (0.14, 0.48), (0.86, 0.50), (0.49, 0.87),
-            (0.34, 0.34), (0.68, 0.65), (0.67, 0.36), (0.33, 0.66),
-            (0.35, 0.12), (0.65, 0.12), (0.12, 0.32), (0.88, 0.32),
-            (0.12, 0.68), (0.88, 0.68), (0.35, 0.88), (0.65, 0.88),
-            (0.27, 0.48), (0.73, 0.48), (0.50, 0.29), (0.50, 0.71)
+            (0.20, 0.18), (0.50, 0.14), (0.80, 0.20),
+            (0.14, 0.48), (0.86, 0.48),
+            (0.20, 0.82), (0.50, 0.86), (0.80, 0.80),
+            (0.28, 0.60)
         ]
         return positions.map { x, y in
             CGPoint(x: bounds.minX + bounds.width * x, y: bounds.minY + bounds.height * y)
         }
     }
 
-    private func rotatedCandidates(_ candidates: [CGPoint], offset: Int) -> [CGPoint] {
-        guard !candidates.isEmpty else { return [] }
-        let start = offset % candidates.count
-        return Array(candidates[start...]) + Array(candidates[..<start])
+    private func searchCenters(in bounds: CGRect, preferred: CGPoint, size: CGSize) -> [CGPoint] {
+        let minX = bounds.minX + size.width / 2
+        let maxX = bounds.maxX - size.width / 2
+        let minY = bounds.minY + size.height / 2
+        let maxY = bounds.maxY - size.height / 2
+        guard minX <= maxX, minY <= maxY else { return [CGPoint(x: bounds.midX, y: bounds.midY)] }
+
+        var centers: [CGPoint] = []
+        for y in stride(from: minY, through: maxY, by: 5) {
+            for x in stride(from: minX, through: maxX, by: 5) {
+                centers.append(CGPoint(x: x, y: y))
+            }
+        }
+        centers.append(clampedCenter(preferred, size: size, in: bounds))
+        return centers.sorted { squaredDistance($0, preferred) < squaredDistance($1, preferred) }
     }
 
     private func clampedCenter(_ center: CGPoint, size: CGSize, in bounds: CGRect) -> CGPoint {
@@ -4030,6 +4140,52 @@ private struct ThemeCloudOrbitLayout: Layout {
 
     private func rect(centeredAt center: CGPoint, size: CGSize) -> CGRect {
         CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
+    }
+
+    private func firstAvailableCenter(
+        from centers: [CGPoint],
+        collisionSize: CGSize,
+        occupied: [CGRect]
+    ) -> CGPoint? {
+        let gaps: [CGFloat] = [spacing, max(CGFloat(2), spacing - 3), 0]
+        for gap in gaps {
+            if let center = centers.first(where: { candidate in
+                let candidateRect = rect(centeredAt: candidate, size: collisionSize)
+                    .insetBy(dx: -gap, dy: -gap)
+                return occupied.allSatisfy { !$0.intersects(candidateRect) }
+            }) {
+                return center
+            }
+        }
+        return nil
+    }
+
+    private func leastOverlappingCenter(
+        from centers: [CGPoint],
+        collisionSize: CGSize,
+        occupied: [CGRect]
+    ) -> CGPoint {
+        centers.min { first, second in
+            overlapArea(of: rect(centeredAt: first, size: collisionSize), with: occupied) <
+                overlapArea(of: rect(centeredAt: second, size: collisionSize), with: occupied)
+        } ?? .zero
+    }
+
+    private func overlapArea(of rect: CGRect, with occupied: [CGRect]) -> CGFloat {
+        occupied.reduce(0) { result, other in
+            let intersection = rect.intersection(other)
+            return result + (intersection.isNull ? 0 : intersection.width * intersection.height)
+        }
+    }
+
+    private func squaredDistance(_ first: CGPoint, _ second: CGPoint) -> CGFloat {
+        let dx = first.x - second.x
+        let dy = first.y - second.y
+        return dx * dx + dy * dy
+    }
+
+    private func scaledSize(_ size: CGSize, scale: CGFloat) -> CGSize {
+        CGSize(width: size.width * scale, height: size.height * scale)
     }
 
     private func rotatedSize(_ size: CGSize, degrees: Double) -> CGSize {
