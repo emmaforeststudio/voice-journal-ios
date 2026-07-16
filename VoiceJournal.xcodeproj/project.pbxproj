@@ -456,6 +456,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				VOICE_JOURNAL_BACKEND_URL = "http://Emmas-MacBook-Pro.local:8787";
+				VOICE_JOURNAL_EMAIL_BACKEND_URL = "https://flara-day-backend.emmaforeststudio.workers.dev";
 			};
 			name = Debug;
 		};
@@ -481,6 +482,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				VOICE_JOURNAL_BACKEND_URL = "https://flara-day-backend.emmaforeststudio.workers.dev";
+				VOICE_JOURNAL_EMAIL_BACKEND_URL = "https://flara-day-backend.emmaforeststudio.workers.dev";
 			};
 			name = Release;
 		};

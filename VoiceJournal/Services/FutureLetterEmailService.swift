@@ -152,13 +152,15 @@ struct FutureLetterEmailService {
     }
 
     private func backendURL() throws -> URL {
-        guard
-            let value = Bundle.main.object(forInfoDictionaryKey: "VoiceJournalBackendURL") as? String,
-            let url = URL(string: value)
-        else {
-            throw FutureLetterEmailServiceError.missingBackendURL
+        let keys = ["VoiceJournalEmailBackendURL", "VoiceJournalBackendURL"]
+        for key in keys {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else { continue }
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let url = URL(string: trimmedValue), url.scheme == "https" {
+                return url
+            }
         }
-        return url
+        throw FutureLetterEmailServiceError.missingBackendURL
     }
 
     private func decodeError(from data: Data) -> FutureLetterEmailServiceError {

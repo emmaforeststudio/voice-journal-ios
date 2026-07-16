@@ -42,5 +42,7 @@
 	<dict/>
 	<key>VoiceJournalBackendURL</key>
 	<string>$(VOICE_JOURNAL_BACKEND_URL)</string>
+	<key>VoiceJournalEmailBackendURL</key>
+	<string>$(VOICE_JOURNAL_EMAIL_BACKEND_URL)</string>
 </dict>
 </plist>
