@@ -2369,7 +2369,11 @@ private struct FutureLetterComposerView: View {
         .navigationTitle("Future Letter")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            try? await recorder.prepare()
+            do {
+                try await recorder.prepare()
+            } catch {
+                message = error.localizedDescription
+            }
             await refreshEmailStatuses()
         }
         .navigationDestination(item: $selectedCollection) { collection in
@@ -2482,36 +2486,30 @@ private struct FutureLetterComposerView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Text("Delivery")
+                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
-            .font(selectedFontDesignPreference.font(.body))
-            .onChange(of: deliveryDate) { _, _ in
+                .onChange(of: deliveryDate) { _, _ in
+                    deactivateTextEditing()
+                }
+
+            Picker("Delivery Method", selection: $deliveryMethod) {
+                Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
+                Text("Email").tag(FutureLetterDeliveryMethod.email)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: deliveryMethod) { _, _ in
                 deactivateTextEditing()
+                message = nil
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Delivery Method")
-                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Picker("Delivery Method", selection: $deliveryMethod) {
-                    Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
-                    Text("Email").tag(FutureLetterDeliveryMethod.email)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: deliveryMethod) { _, _ in
-                    deactivateTextEditing()
-                    message = nil
-                }
-
-                Text(deliveryMethod == .email
-                     ? "The full letter will be emailed to the verified address."
-                     : "The letter will be delivered as a notification on this iPhone.")
+            if deliveryMethod == .email {
+                FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
+            } else {
+                Text("Notification on this iPhone")
                     .font(selectedFontDesignPreference.font(.caption))
                     .foregroundStyle(.secondary)
-
-                if deliveryMethod == .email {
-                    FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
-                }
             }
         }
         .padding(16)
@@ -2758,22 +2756,41 @@ private struct FutureLetterEmailSetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Email address", text: $email)
-                .font(selectedFontDesignPreference.font(.body))
-                .keyboardType(.emailAddress)
-                .textContentType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focusedField, equals: .email)
-                .padding(12)
-                .background(AppThemeBackground())
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-
             if isCurrentEmailVerified {
-                Label("Email verified", systemImage: "checkmark.circle.fill")
-                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
-                    .foregroundStyle(.green)
+                HStack(spacing: 10) {
+                    Label {
+                        Text(normalizedEmail(email))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
+
+                    Spacer(minLength: 8)
+
+                    Button("Change") {
+                        verifiedEmail = nil
+                        didRequestCode = false
+                        verificationCode = ""
+                        message = nil
+                        focusedField = .email
+                    }
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
+                }
             } else {
+                TextField("Email address", text: $email)
+                    .font(selectedFontDesignPreference.font(.body))
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .email)
+                    .padding(12)
+                    .background(AppThemeBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+
                 Button {
                     requestVerificationCode()
                 } label: {
@@ -2887,33 +2904,35 @@ private struct FutureLetterDeliveryDatePicker: View {
     @Binding var date: Date
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 12) {
-                Spacer(minLength: 0)
+        HStack(spacing: 10) {
+            Spacer(minLength: 0)
 
-                Image(systemName: "calendar")
-                    .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
+            Image(systemName: "clock")
+                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
 
-                DatePicker(
-                    "Delivery Date & Time",
-                    selection: $date,
-                    in: Date()...,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .labelsHidden()
+            DatePicker(
+                "Delivery date",
+                selection: $date,
+                in: Date()...,
+                displayedComponents: .date
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
 
-                Spacer(minLength: 0)
-            }
+            DatePicker(
+                "Delivery time",
+                selection: $date,
+                in: Date()...,
+                displayedComponents: .hourAndMinute
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
 
-            Text(date.formatted(.dateTime.weekday(.wide).month(.wide).day().year().hour().minute()))
-                .font(selectedFontDesignPreference.font(.caption))
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Delivery Date & Time")
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -3268,7 +3287,11 @@ private struct FutureLetterDetailView: View {
             loadLetter()
         }
         .task {
-            try? await recorder.prepare()
+            do {
+                try await recorder.prepare()
+            } catch {
+                message = error.localizedDescription
+            }
         }
     }
 
@@ -3377,36 +3400,30 @@ private struct FutureLetterDetailView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Text("Delivery")
+                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
-            .font(selectedFontDesignPreference.font(.body))
-            .onChange(of: deliveryDate) { _, _ in
+                .onChange(of: deliveryDate) { _, _ in
+                    deactivateTextEditing()
+                }
+
+            Picker("Delivery Method", selection: $deliveryMethod) {
+                Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
+                Text("Email").tag(FutureLetterDeliveryMethod.email)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: deliveryMethod) { _, _ in
                 deactivateTextEditing()
+                message = nil
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Delivery Method")
-                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Picker("Delivery Method", selection: $deliveryMethod) {
-                    Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
-                    Text("Email").tag(FutureLetterDeliveryMethod.email)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: deliveryMethod) { _, _ in
-                    deactivateTextEditing()
-                    message = nil
-                }
-
-                Text(deliveryMethod == .email
-                     ? "The full letter will be emailed to the verified address."
-                     : "The letter will be delivered as a notification on this iPhone.")
+            if deliveryMethod == .email {
+                FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
+            } else {
+                Text("Notification on this iPhone")
                     .font(selectedFontDesignPreference.font(.caption))
                     .foregroundStyle(.secondary)
-
-                if deliveryMethod == .email {
-                    FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
-                }
             }
         }
         .padding(16)
