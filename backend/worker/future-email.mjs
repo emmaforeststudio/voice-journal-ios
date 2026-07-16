@@ -279,6 +279,11 @@ async function scheduleFutureEmail(request, env) {
   const letterBody = String(body.body ?? "").trim();
   const deliveryAt = new Date(body.deliveryAt).getTime();
   const now = Date.now();
+  const requestedWrittenAt = new Date(body.writtenAt).getTime();
+  const writtenAt = Number.isFinite(requestedWrittenAt) && requestedWrittenAt <= now + 5 * 60_000
+    ? requestedWrittenAt
+    : now;
+  const timeZone = normalizedTimeZone(body.timeZone);
 
   if (!letterBody || letterBody.length > MAX_BODY_LENGTH) {
     throw new APIError(400, "invalid_letter_body", `The letter must contain between 1 and ${MAX_BODY_LENGTH} characters.`);
@@ -308,7 +313,13 @@ async function scheduleFutureEmail(request, env) {
     throw new APIError(409, "letter_already_scheduled", "This letter is already scheduled.", { status: existing.status });
   }
 
-  const encryptedPayload = await encryptPayload({ email, title, body: letterBody }, env.LETTER_ENCRYPTION_KEY);
+  const encryptedPayload = await encryptPayload({
+    email,
+    title,
+    body: letterBody,
+    writtenAt: new Date(writtenAt).toISOString(),
+    timeZone,
+  }, env.LETTER_ENCRYPTION_KEY);
   await env.DB.prepare(
     `INSERT INTO future_email_letters
       (id, device_id, encrypted_payload, delivery_at, status, attempt_count,
@@ -393,11 +404,16 @@ async function authenticateDevice(request, env, allowCreate) {
 async function sendLetterEmail(payload, letterID, env, fetchImpl) {
   const subject = payload.title || "A letter from your past self";
   const escapedBody = escapeHTML(payload.body).replace(/\n/g, "<br>");
-  const html = `<!doctype html><html><body style="margin:0;background:#f3faf7;color:#17201d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><div style="max-width:640px;margin:0 auto;padding:40px 24px"><p style="color:#4f776b;font-weight:600">Flara Day</p><h1 style="font-size:28px">${escapeHTML(subject)}</h1><div style="font-size:18px;line-height:1.65;background:#ffffff;padding:28px;border-radius:12px">${escapedBody}</div><p style="margin-top:24px;color:#6b7672;font-size:13px">This future letter was scheduled privately in Flara Day.</p></div></body></html>`;
+  const writtenContext = formatWrittenContext(payload.writtenAt, payload.timeZone);
+  const writtenHTML = writtenContext
+    ? `<p style="margin:8px 0 22px;color:#6b7672;font-size:14px">${escapeHTML(writtenContext)}</p>`
+    : "";
+  const writtenText = writtenContext ? `\n${writtenContext}\n` : "";
+  const html = `<!doctype html><html><body style="margin:0;background:#f3faf7;color:#17201d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><div style="max-width:640px;margin:0 auto;padding:40px 24px"><p style="color:#4f776b;font-weight:600">Flara Day</p><h1 style="font-size:28px">${escapeHTML(subject)}</h1>${writtenHTML}<div style="font-size:18px;line-height:1.65;background:#ffffff;padding:28px;border-radius:12px">${escapedBody}</div><p style="margin-top:24px;color:#6b7672;font-size:13px">This future letter was scheduled privately in Flara Day.</p></div></body></html>`;
   return sendResendEmail({
     to: payload.email,
     subject,
-    text: `${subject}\n\n${payload.body}\n\nThis future letter was scheduled privately in Flara Day.`,
+    text: `${subject}\n${writtenText}\n${payload.body}\n\nThis future letter was scheduled privately in Flara Day.`,
     html,
     idempotencyKey: `future-letter-${letterID}`,
   }, env, fetchImpl);
@@ -449,6 +465,16 @@ export function normalizeEmail(value) {
     throw new APIError(400, "invalid_email", "Enter a valid email address.");
   }
   return email;
+}
+
+function normalizedTimeZone(value) {
+  const candidate = String(value ?? "UTC").trim() || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format();
+    return candidate;
+  } catch {
+    return "UTC";
+  }
 }
 
 function normalizedUUID(value, fieldName) {
@@ -531,6 +557,39 @@ export function escapeHTML(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+export function formatWrittenContext(writtenAt, timeZone = "UTC", deliveredAt = Date.now()) {
+  const writtenDate = new Date(writtenAt);
+  const deliveredDate = new Date(deliveredAt);
+  if (!Number.isFinite(writtenDate.getTime()) || !Number.isFinite(deliveredDate.getTime())) {
+    return null;
+  }
+
+  const formattedDate = new Intl.DateTimeFormat("en-US", {
+    timeZone: normalizedTimeZone(timeZone),
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(writtenDate);
+  const elapsedDays = Math.max(0, Math.floor((deliveredDate.getTime() - writtenDate.getTime()) / 86_400_000));
+
+  let age;
+  if (elapsedDays === 0) {
+    age = "today";
+  } else if (elapsedDays < 30) {
+    age = `${elapsedDays} ${elapsedDays === 1 ? "day" : "days"} ago`;
+  } else if (elapsedDays < 365) {
+    const months = Math.max(1, Math.floor(elapsedDays / 30));
+    age = `${months} ${months === 1 ? "month" : "months"} ago`;
+  } else {
+    const years = Math.max(1, Math.floor(elapsedDays / 365));
+    age = `${years} ${years === 1 ? "year" : "years"} ago`;
+  }
+
+  return `Written ${formattedDate} · ${age}`;
 }
 
 function safeProviderError(error) {

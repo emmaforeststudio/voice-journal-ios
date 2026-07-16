@@ -3952,8 +3952,10 @@ private enum FutureLetterFocusedField: Hashable {
 }
 
 private struct ThemeCloudView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let themes: [(theme: String, count: Int)]
+    @State private var layoutSeed = UInt64.random(in: UInt64.min...UInt64.max)
 
     private var displayThemes: [(theme: String, count: Int)] {
         Array(themes.prefix(10))
@@ -3989,7 +3991,7 @@ private struct ThemeCloudView: View {
     }
 
     var body: some View {
-        ThemeCloudOrbitLayout(spacing: 5) {
+        ThemeCloudOrbitLayout(spacing: 5, seed: layoutSeed) {
             ForEach(Array(arrangedThemes.enumerated()), id: \.element.theme) { index, item in
                 let isMain = index == 0
                 let weight: Font.Weight = isMain ? .bold : (index <= 2 ? .semibold : .regular)
@@ -4012,6 +4014,11 @@ private struct ThemeCloudView: View {
         .padding(.horizontal, 2)
         .clipped()
         .animation(.easeInOut(duration: 0.2), value: displayThemes.map(\.theme))
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                layoutSeed = UInt64.random(in: UInt64.min...UInt64.max)
+            }
+        }
     }
 
     private func stableKey(for theme: String) -> UInt64 {
@@ -4053,6 +4060,7 @@ private struct ThemeCloudRotationKey: LayoutValueKey {
 
 private struct ThemeCloudOrbitLayout: Layout {
     var spacing: CGFloat
+    var seed: UInt64
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions(by: CGSize(width: 320, height: 230))
@@ -4067,7 +4075,7 @@ private struct ThemeCloudOrbitLayout: Layout {
         subviews[0].place(at: mainCenter, anchor: .center, proposal: ProposedViewSize(mainSize))
 
         var occupied = [rect(centeredAt: mainCenter, size: mainCollisionSize)]
-        let anchors = compactAnchors(in: bounds)
+        let anchors = distributedAnchors(in: bounds)
 
         for index in subviews.indices.dropFirst() {
             let size = subviews[index].sizeThatFits(.unspecified)
@@ -4089,15 +4097,31 @@ private struct ThemeCloudOrbitLayout: Layout {
         }
     }
 
-    private func compactAnchors(in bounds: CGRect) -> [CGPoint] {
-        let positions: [(CGFloat, CGFloat)] = [
-            (0.50, 0.19), (0.70, 0.26), (0.81, 0.45),
-            (0.77, 0.68), (0.61, 0.79), (0.39, 0.79),
-            (0.23, 0.68), (0.19, 0.45), (0.30, 0.26)
-        ]
-        return positions.map { x, y in
-            CGPoint(x: bounds.minX + bounds.width * x, y: bounds.minY + bounds.height * y)
+    private func distributedAnchors(in bounds: CGRect) -> [CGPoint] {
+        let count = 9
+        let phase = randomUnit(for: 0) * (2 * CGFloat.pi / CGFloat(count))
+        return (0..<count).map { index in
+            let angleJitter = (randomUnit(for: index + 10) - 0.5) * 0.18
+            let angle = -CGFloat.pi / 2
+                + phase
+                + CGFloat(index) * (2 * CGFloat.pi / CGFloat(count))
+                + angleJitter
+            let radius = 0.92 + randomUnit(for: index + 20) * 0.08
+            let x = 0.50 + cos(angle) * 0.43 * radius
+            let y = 0.50 + sin(angle) * 0.40 * radius
+            return CGPoint(
+                x: bounds.minX + bounds.width * x,
+                y: bounds.minY + bounds.height * y
+            )
         }
+    }
+
+    private func randomUnit(for index: Int) -> CGFloat {
+        var value = seed &+ UInt64(index + 1) &* 0x9E3779B97F4A7C15
+        value = (value ^ (value >> 30)) &* 0xBF58476D1CE4E5B9
+        value = (value ^ (value >> 27)) &* 0x94D049BB133111EB
+        value ^= value >> 31
+        return CGFloat(value % 1_000_000) / 1_000_000
     }
 
     private func searchCenters(in bounds: CGRect, preferred: CGPoint, size: CGSize) -> [CGPoint] {
@@ -4114,10 +4138,8 @@ private struct ThemeCloudOrbitLayout: Layout {
             }
         }
         centers.append(clampedCenter(preferred, size: size, in: bounds))
-        let cardCenter = CGPoint(x: bounds.midX, y: bounds.midY)
         return centers.sorted {
-            compactnessScore($0, preferred: preferred, cardCenter: cardCenter) <
-                compactnessScore($1, preferred: preferred, cardCenter: cardCenter)
+            squaredDistance($0, preferred) < squaredDistance($1, preferred)
         }
     }
 
@@ -4172,10 +4194,6 @@ private struct ThemeCloudOrbitLayout: Layout {
         let dx = first.x - second.x
         let dy = first.y - second.y
         return dx * dx + dy * dy
-    }
-
-    private func compactnessScore(_ point: CGPoint, preferred: CGPoint, cardCenter: CGPoint) -> CGFloat {
-        squaredDistance(point, preferred) + squaredDistance(point, cardCenter) * 0.20
     }
 
     private func rotatedSize(_ size: CGSize, degrees: Double) -> CGSize {

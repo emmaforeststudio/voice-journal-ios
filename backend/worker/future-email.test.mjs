@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   escapeHTML,
+  formatWrittenContext,
   handleFutureEmailRequest,
   normalizeEmail,
   retryDelayMilliseconds,
@@ -19,6 +20,25 @@ test("escapeHTML protects future-letter markup", () => {
   assert.equal(
     escapeHTML(`<script>alert("x")</script> & 'hello'`),
     "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;hello&#39;"
+  );
+});
+
+test("written context includes the original local date and relative age", () => {
+  assert.equal(
+    formatWrittenContext(
+      "2025-07-16T23:12:00.000Z",
+      "America/Chicago",
+      "2026-07-16T23:12:00.000Z"
+    ),
+    "Written July 16, 2025 at 6:12 PM · 1 year ago"
+  );
+  assert.equal(
+    formatWrittenContext(
+      "2026-06-16T23:12:00.000Z",
+      "America/Chicago",
+      "2026-07-16T23:12:00.000Z"
+    ),
+    "Written June 16, 2026 at 6:12 PM · 1 month ago"
   );
 });
 

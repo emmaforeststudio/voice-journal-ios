@@ -45,7 +45,9 @@ struct FutureLetterEmailService {
             email: email,
             title: letter.title,
             body: letter.body,
-            deliveryAt: Self.iso8601Formatter.string(from: letter.deliveryDate)
+            deliveryAt: Self.iso8601Formatter.string(from: letter.deliveryDate),
+            writtenAt: Self.iso8601Formatter.string(from: letter.createdAt),
+            timeZone: TimeZone.current.identifier
         )
         let response: ScheduleResponse = try await send(
             path: "v1/future-letters",
@@ -215,6 +217,8 @@ private struct SchedulePayload: Encodable {
     let title: String
     let body: String
     let deliveryAt: String
+    let writtenAt: String
+    let timeZone: String
 }
 
 private struct VerificationRequestResponse: Decodable {
