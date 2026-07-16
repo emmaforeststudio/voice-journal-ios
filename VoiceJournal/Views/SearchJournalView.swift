@@ -2351,7 +2351,6 @@ private struct FutureLetterComposerView: View {
             VStack(alignment: .leading, spacing: 18) {
                 composeSection
                 deliverySection
-                actionButtons
                 letterCollectionsSection
             }
             .padding()
@@ -2485,34 +2484,33 @@ private struct FutureLetterComposerView: View {
     }
 
     private var deliverySection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Delivery")
-                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Delivery", systemImage: "clock")
+                .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
+                .foregroundStyle(.primary)
 
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
                 .onChange(of: deliveryDate) { _, _ in
                     deactivateTextEditing()
                 }
 
-            Picker("Delivery Method", selection: $deliveryMethod) {
-                Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
-                Text("Email").tag(FutureLetterDeliveryMethod.email)
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: deliveryMethod) { _, _ in
-                deactivateTextEditing()
-                message = nil
-            }
+            FutureLetterDeliveryMethodPicker(selection: $deliveryMethod)
+                .onChange(of: deliveryMethod) { _, _ in
+                    deactivateTextEditing()
+                    message = nil
+                }
 
             if deliveryMethod == .email {
                 FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
             } else {
-                Text("Notification on this iPhone")
-                    .font(selectedFontDesignPreference.font(.caption))
+                Label("Notification on this iPhone", systemImage: "bell")
+                    .font(selectedFontDesignPreference.font(.callout))
                     .foregroundStyle(.secondary)
             }
+
+            actionButtons
         }
-        .padding(16)
+        .padding(18)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .simultaneousGesture(
@@ -2904,35 +2902,70 @@ private struct FutureLetterDeliveryDatePicker: View {
     @Binding var date: Date
 
     var body: some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0)
-
-            Image(systemName: "clock")
-                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
-
-            DatePicker(
-                "Delivery date",
-                selection: $date,
-                in: Date()...,
-                displayedComponents: .date
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-
-            DatePicker(
-                "Delivery time",
-                selection: $date,
-                in: Date()...,
-                displayedComponents: .hourAndMinute
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-
-            Spacer(minLength: 0)
+        HStack(spacing: 12) {
+            dateControl(title: "Date", components: .date)
+            dateControl(title: "Time", components: .hourAndMinute)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func dateControl(title: String, components: DatePickerComponents) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            DatePicker(
+                "Delivery \(title.lowercased())",
+                selection: $date,
+                in: Date()...,
+                displayedComponents: components
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+            .tint(Color.accentColor)
+        }
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(AppThemeBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+}
+
+private struct FutureLetterDeliveryMethodPicker: View {
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @Binding var selection: FutureLetterDeliveryMethod
+
+    var body: some View {
+        HStack(spacing: 0) {
+            methodButton(.inAppNotification, title: "In-App")
+            methodButton(.email, title: "Email")
+        }
+        .padding(4)
+        .background(AppThemeBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func methodButton(_ method: FutureLetterDeliveryMethod, title: String) -> some View {
+        Button {
+            selection = method
+        } label: {
+            Text(title)
+                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                .foregroundStyle(selection == method ? Color.white : Color.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(selection == method ? Color.accentColor : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 13))
+        .accessibilityAddTraits(selection == method ? .isSelected : [])
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -3270,7 +3303,6 @@ private struct FutureLetterDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 composeSection
                 deliverySection
-                actionButtons
             }
             .padding()
         }
@@ -3399,34 +3431,33 @@ private struct FutureLetterDetailView: View {
     }
 
     private var deliverySection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Delivery")
-                .font(selectedFontDesignPreference.font(.headline, weight: .semibold))
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Delivery", systemImage: "clock")
+                .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
+                .foregroundStyle(.primary)
 
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
                 .onChange(of: deliveryDate) { _, _ in
                     deactivateTextEditing()
                 }
 
-            Picker("Delivery Method", selection: $deliveryMethod) {
-                Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
-                Text("Email").tag(FutureLetterDeliveryMethod.email)
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: deliveryMethod) { _, _ in
-                deactivateTextEditing()
-                message = nil
-            }
+            FutureLetterDeliveryMethodPicker(selection: $deliveryMethod)
+                .onChange(of: deliveryMethod) { _, _ in
+                    deactivateTextEditing()
+                    message = nil
+                }
 
             if deliveryMethod == .email {
                 FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
             } else {
-                Text("Notification on this iPhone")
-                    .font(selectedFontDesignPreference.font(.caption))
+                Label("Notification on this iPhone", systemImage: "bell")
+                    .font(selectedFontDesignPreference.font(.callout))
                     .foregroundStyle(.secondary)
             }
+
+            actionButtons
         }
-        .padding(16)
+        .padding(18)
         .background(AppThemeCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .simultaneousGesture(
@@ -3863,21 +3894,34 @@ private struct ThemeCloudView: View {
         }
     }
 
+    private var organicallyDistributedThemes: [(theme: String, count: Int)] {
+        surroundingThemes.sorted { first, second in
+            let firstKey = stableDistributionKey(for: first.theme)
+            let secondKey = stableDistributionKey(for: second.theme)
+            if firstKey == secondKey {
+                return first.theme.localizedCaseInsensitiveCompare(second.theme) == .orderedAscending
+            }
+            return firstKey < secondKey
+        }
+    }
+
     private var topThemes: [(theme: String, count: Int)] {
-        Array(surroundingThemes.prefix(surroundingThemes.count / 2))
+        organicallyDistributedThemes.enumerated().compactMap { index, theme in
+            index.isMultiple(of: 2) ? theme : nil
+        }
     }
 
     private var bottomThemes: [(theme: String, count: Int)] {
-        Array(surroundingThemes.dropFirst(surroundingThemes.count / 2))
+        organicallyDistributedThemes.enumerated().compactMap { index, theme in
+            index.isMultiple(of: 2) ? nil : theme
+        }
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 9) {
             if !topThemes.isEmpty {
                 themeFlow(topThemes, startIndex: 1)
             }
-
-            Spacer(minLength: 0)
 
             if let mainTheme {
                 Text(mainTheme.theme)
@@ -3889,8 +3933,6 @@ private struct ThemeCloudView: View {
                     .accessibilityLabel(mainTheme.theme)
             }
 
-            Spacer(minLength: 0)
-
             if !bottomThemes.isEmpty {
                 themeFlow(bottomThemes, startIndex: topThemes.count + 1)
             }
@@ -3898,6 +3940,13 @@ private struct ThemeCloudView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 4)
         .clipped()
+        .animation(.easeInOut(duration: 0.2), value: displayThemes.map(\.theme))
+    }
+
+    private func stableDistributionKey(for theme: String) -> UInt64 {
+        theme.unicodeScalars.reduce(14_695_981_039_346_656_037) { hash, scalar in
+            (hash ^ UInt64(scalar.value)) &* 1_099_511_628_211
+        }
     }
 
     private func fontSize(for count: Int) -> CGFloat {
