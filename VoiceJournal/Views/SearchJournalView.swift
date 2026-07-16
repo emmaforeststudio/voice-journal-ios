@@ -2489,6 +2489,7 @@ private struct FutureLetterComposerView: View {
                 .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .imageScale(.small)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
                 .onChange(of: deliveryDate) { _, _ in
@@ -2505,8 +2506,9 @@ private struct FutureLetterComposerView: View {
                 FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
             } else {
                 Label("Notification on this iPhone", systemImage: "bell")
-                    .font(selectedFontDesignPreference.font(.callout))
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .imageScale(.small)
             }
 
             actionButtons
@@ -2527,7 +2529,9 @@ private struct FutureLetterComposerView: View {
                 saveLetter(shouldSchedule: false)
             } label: {
                 Text("Save")
-                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -2537,7 +2541,9 @@ private struct FutureLetterComposerView: View {
                 saveLetter(shouldSchedule: true)
             } label: {
                 Text(deliveryMethod == .email ? "Schedule Email" : "Schedule In-App")
-                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -2910,7 +2916,7 @@ private struct FutureLetterDeliveryDatePicker: View {
     }
 
     private func dateControl(title: String, components: DatePickerComponents) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .center, spacing: 4) {
             Text(title)
                 .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
@@ -2925,11 +2931,7 @@ private struct FutureLetterDeliveryDatePicker: View {
             .datePickerStyle(.compact)
             .tint(Color.accentColor)
         }
-        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(AppThemeBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -2942,31 +2944,33 @@ private struct FutureLetterDeliveryMethodPicker: View {
     @Binding var selection: FutureLetterDeliveryMethod
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 12) {
             methodButton(.inAppNotification, title: "In-App")
             methodButton(.email, title: "Email")
         }
-        .padding(4)
-        .background(AppThemeBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 18))
         .accessibilityElement(children: .contain)
     }
 
+    @ViewBuilder
     private func methodButton(_ method: FutureLetterDeliveryMethod, title: String) -> some View {
-        Button {
+        let button = Button {
             selection = method
         } label: {
             Text(title)
                 .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
-                .foregroundStyle(selection == method ? Color.white : Color.accentColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .background(selection == method ? Color.accentColor : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .accessibilityAddTraits(selection == method ? .isSelected : [])
+
+        if selection == method {
+            button
+                .buttonStyle(.borderedProminent)
+                .accessibilityAddTraits(.isSelected)
+        } else {
+            button
+                .buttonStyle(.bordered)
+        }
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -3437,6 +3441,7 @@ private struct FutureLetterDetailView: View {
                 .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .imageScale(.small)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
                 .onChange(of: deliveryDate) { _, _ in
@@ -3453,8 +3458,9 @@ private struct FutureLetterDetailView: View {
                 FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
             } else {
                 Label("Notification on this iPhone", systemImage: "bell")
-                    .font(selectedFontDesignPreference.font(.callout))
+                    .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .imageScale(.small)
             }
 
             actionButtons
@@ -3475,7 +3481,9 @@ private struct FutureLetterDetailView: View {
                 saveChanges(shouldSchedule: false)
             } label: {
                 Text("Save")
-                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -3485,7 +3493,9 @@ private struct FutureLetterDetailView: View {
                 saveChanges(shouldSchedule: true)
             } label: {
                 Text(deliveryMethod == .email ? "Schedule Email" : "Schedule In-App")
-                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -3928,7 +3938,7 @@ private struct ThemeCloudView: View {
 
     private func rotation(for theme: String) -> Double {
         let angles: [Double] = [-7, 5, -3, 8, -5, 3, 6, -8, 4]
-        return angles[Int(stableKey(for: theme) % UInt64(angles.count))]
+        return -angles[Int(stableKey(for: theme) % UInt64(angles.count))]
     }
 
     private func fontSize(for count: Int) -> CGFloat {
