@@ -2348,7 +2348,7 @@ private struct FutureLetterComposerView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
                 composeSection
                 deliverySection
                 letterCollectionsSection
@@ -2392,7 +2392,9 @@ private struct FutureLetterComposerView: View {
 
             letterBodyEditor(placeholder: letterBodyPlaceholder)
             compositionModePicker
-            statusSection
+            if isProcessingRecording || message != nil {
+                statusSection
+            }
         }
     }
 
@@ -2487,7 +2489,7 @@ private struct FutureLetterComposerView: View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Delivery", systemImage: "clock")
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.primary)
                 .imageScale(.small)
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -2540,7 +2542,7 @@ private struct FutureLetterComposerView: View {
             Button {
                 saveLetter(shouldSchedule: true)
             } label: {
-                Text(deliveryMethod == .email ? "Schedule Email" : "Schedule In-App")
+                Text("Schedule")
                     .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
@@ -2963,11 +2965,11 @@ private struct FutureLetterDeliveryDatePicker: View {
             activePicker = component
         } label: {
             Text(title)
-                .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
-                .frame(maxWidth: .infinity, minHeight: 42)
+                .frame(maxWidth: .infinity, minHeight: 36)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -3023,12 +3025,12 @@ private struct FutureLetterDeliveryMethodPicker: View {
             selection = method
         } label: {
             Text(title)
-                .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
                 .foregroundStyle(selection == method ? Color.white : Color.accentColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
+                .padding(.vertical, 6)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -3369,7 +3371,7 @@ private struct FutureLetterDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
                 composeSection
                 deliverySection
             }
@@ -3408,7 +3410,9 @@ private struct FutureLetterDetailView: View {
 
             letterBodyEditor(placeholder: letterBodyPlaceholder)
             compositionModePicker
-            statusSection
+            if isProcessingRecording || message != nil {
+                statusSection
+            }
         }
     }
 
@@ -3503,7 +3507,7 @@ private struct FutureLetterDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Delivery", systemImage: "clock")
                 .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.primary)
                 .imageScale(.small)
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -3556,7 +3560,7 @@ private struct FutureLetterDetailView: View {
             Button {
                 saveChanges(shouldSchedule: true)
             } label: {
-                Text(deliveryMethod == .email ? "Schedule Email" : "Schedule In-App")
+                Text("Schedule")
                     .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
@@ -3975,11 +3979,10 @@ private struct ThemeCloudView: View {
     }
 
     var body: some View {
-        ThemeCloudOrbitLayout(spacing: 7) {
+        ThemeCloudOrbitLayout(spacing: 5) {
             ForEach(Array(arrangedThemes.enumerated()), id: \.element.theme) { index, item in
                 let isMain = index == 0
                 let weight: Font.Weight = isMain ? .bold : (index <= 2 ? .semibold : .regular)
-                let scale = cloudScale(for: item.theme)
                 Text(item.theme)
                     .font(selectedFontDesignPreference.fixedFont(
                         size: fontSize(for: item.count) + (isMain ? 4 : 0),
@@ -3989,11 +3992,9 @@ private struct ThemeCloudView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
                     .rotationEffect(.degrees(isMain ? 0 : rotation(for: item.theme)))
-                    .scaleEffect(scale)
                     .layoutValue(
                         key: ThemeCloudRotationKey.self, value: isMain ? 0 : rotation(for: item.theme)
                     )
-                    .layoutValue(key: ThemeCloudScaleKey.self, value: scale)
                     .accessibilityLabel(item.theme)
             }
         }
@@ -4014,29 +4015,11 @@ private struct ThemeCloudView: View {
         return -angles[Int(stableKey(for: theme) % UInt64(angles.count))]
     }
 
-    private func cloudScale(for theme: String) -> CGFloat {
-        let densityScale: CGFloat
-        switch displayThemes.count {
-        case 0...5: densityScale = 1
-        case 6: densityScale = 0.95
-        case 7: densityScale = 0.90
-        case 8: densityScale = 0.85
-        case 9: densityScale = 0.80
-        default: densityScale = 0.75
-        }
-
-        let characterCount = max(1, theme.count)
-        let lengthScale: CGFloat = characterCount > 22
-            ? max(0.62, 22 / CGFloat(characterCount))
-            : 1
-        return min(densityScale, lengthScale)
-    }
-
     private func fontSize(for count: Int) -> CGFloat {
         guard rankedCounts.count > 1 else { return 24 }
         let rank = rankedCounts.firstIndex(of: count) ?? rankedCounts.count - 1
-        let sizes: [CGFloat] = [24, 21.5, 19.5, 17.5, 16, 15, 14]
-        return rank < sizes.count ? sizes[rank] : 13
+        let progress = CGFloat(rank) / CGFloat(rankedCounts.count - 1)
+        return 24 - progress * 11
     }
 
     private func themeColor(at index: Int) -> Color {
@@ -4058,10 +4041,6 @@ private struct ThemeCloudRotationKey: LayoutValueKey {
     static let defaultValue = 0.0
 }
 
-private struct ThemeCloudScaleKey: LayoutValueKey {
-    static let defaultValue: CGFloat = 1
-}
-
 private struct ThemeCloudOrbitLayout: Layout {
     var spacing: CGFloat
 
@@ -4073,18 +4052,16 @@ private struct ThemeCloudOrbitLayout: Layout {
         guard !subviews.isEmpty else { return }
 
         let mainSize = subviews[0].sizeThatFits(.unspecified)
-        let mainVisualSize = scaledSize(mainSize, scale: subviews[0][ThemeCloudScaleKey.self])
-        let mainCollisionSize = rotatedSize(mainVisualSize, degrees: subviews[0][ThemeCloudRotationKey.self])
+        let mainCollisionSize = rotatedSize(mainSize, degrees: subviews[0][ThemeCloudRotationKey.self])
         let mainCenter = CGPoint(x: bounds.midX, y: bounds.midY)
         subviews[0].place(at: mainCenter, anchor: .center, proposal: ProposedViewSize(mainSize))
 
         var occupied = [rect(centeredAt: mainCenter, size: mainCollisionSize)]
-        let anchors = orbitAnchors(in: bounds)
+        let anchors = compactAnchors(in: bounds)
 
         for index in subviews.indices.dropFirst() {
             let size = subviews[index].sizeThatFits(.unspecified)
-            let visualSize = scaledSize(size, scale: subviews[index][ThemeCloudScaleKey.self])
-            let collisionSize = rotatedSize(visualSize, degrees: subviews[index][ThemeCloudRotationKey.self])
+            let collisionSize = rotatedSize(size, degrees: subviews[index][ThemeCloudRotationKey.self])
             let preferred = anchors[(index - 1) % anchors.count]
             let placements = searchCenters(in: bounds, preferred: preferred, size: collisionSize)
             let center = firstAvailableCenter(
@@ -4102,12 +4079,11 @@ private struct ThemeCloudOrbitLayout: Layout {
         }
     }
 
-    private func orbitAnchors(in bounds: CGRect) -> [CGPoint] {
+    private func compactAnchors(in bounds: CGRect) -> [CGPoint] {
         let positions: [(CGFloat, CGFloat)] = [
-            (0.20, 0.18), (0.50, 0.14), (0.80, 0.20),
-            (0.14, 0.48), (0.86, 0.48),
-            (0.20, 0.82), (0.50, 0.86), (0.80, 0.80),
-            (0.28, 0.60)
+            (0.50, 0.34), (0.68, 0.40), (0.69, 0.60),
+            (0.50, 0.67), (0.31, 0.60), (0.31, 0.40),
+            (0.50, 0.24), (0.76, 0.50), (0.50, 0.76)
         ]
         return positions.map { x, y in
             CGPoint(x: bounds.minX + bounds.width * x, y: bounds.minY + bounds.height * y)
@@ -4128,7 +4104,11 @@ private struct ThemeCloudOrbitLayout: Layout {
             }
         }
         centers.append(clampedCenter(preferred, size: size, in: bounds))
-        return centers.sorted { squaredDistance($0, preferred) < squaredDistance($1, preferred) }
+        let cardCenter = CGPoint(x: bounds.midX, y: bounds.midY)
+        return centers.sorted {
+            compactnessScore($0, preferred: preferred, cardCenter: cardCenter) <
+                compactnessScore($1, preferred: preferred, cardCenter: cardCenter)
+        }
     }
 
     private func clampedCenter(_ center: CGPoint, size: CGSize, in bounds: CGRect) -> CGPoint {
@@ -4184,8 +4164,8 @@ private struct ThemeCloudOrbitLayout: Layout {
         return dx * dx + dy * dy
     }
 
-    private func scaledSize(_ size: CGSize, scale: CGFloat) -> CGSize {
-        CGSize(width: size.width * scale, height: size.height * scale)
+    private func compactnessScore(_ point: CGPoint, preferred: CGPoint, cardCenter: CGPoint) -> CGFloat {
+        squaredDistance(point, cardCenter) + squaredDistance(point, preferred) * 0.22
     }
 
     private func rotatedSize(_ size: CGSize, degrees: Double) -> CGSize {

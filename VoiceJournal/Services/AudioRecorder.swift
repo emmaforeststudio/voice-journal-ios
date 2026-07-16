@@ -25,14 +25,12 @@ final class AudioRecorder: NSObject, ObservableObject {
 
         let granted = await requestMicrophonePermission()
         guard granted else { throw RecordingError.microphoneDenied }
-
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement)
-        try session.setActive(true)
     }
 
     func start() async throws {
         try await prepare()
+        let session = AVAudioSession.sharedInstance()
+        try await activateRecordingSession(session)
 
         let url = Self.temporaryRecordingURL()
         let settings: [String: Any] = [
@@ -43,10 +41,17 @@ final class AudioRecorder: NSObject, ObservableObject {
             AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
         ]
-        let audioRecorder = try AVAudioRecorder(url: url, settings: settings)
-        audioRecorder.isMeteringEnabled = true
-        guard audioRecorder.prepareToRecord(), audioRecorder.record() else {
-            throw RecordingError.couldNotStart
+        let audioRecorder: AVAudioRecorder
+        do {
+            audioRecorder = try AVAudioRecorder(url: url, settings: settings)
+            audioRecorder.isMeteringEnabled = true
+            guard audioRecorder.prepareToRecord(), audioRecorder.record() else {
+                throw RecordingError.couldNotStart
+            }
+        } catch {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            try? FileManager.default.removeItem(at: url)
+            throw error
         }
 
         inputLevel = 0
@@ -71,7 +76,7 @@ final class AudioRecorder: NSObject, ObservableObject {
         isRecording = false
         inputLevel = 0
         hasDetectedAudio = false
-        try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         let recordedData = try? Data(contentsOf: recordingURL)
         guard Self.shouldTranscribe(
@@ -107,6 +112,21 @@ final class AudioRecorder: NSObject, ObservableObject {
         guard endByte > startByte + byteRate / 2 else { return nil }
         let pcmData = fileData.subdata(in: startByte..<endByte)
         return Self.wavData(fromPCMData: pcmData)
+    }
+
+    private func activateRecordingSession(_ session: AVAudioSession) async throws {
+        do {
+            try configureAndActivate(session)
+        } catch {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            try await Task.sleep(for: .milliseconds(150))
+            try configureAndActivate(session)
+        }
+    }
+
+    private func configureAndActivate(_ session: AVAudioSession) throws {
+        try session.setCategory(.record, mode: .measurement)
+        try session.setActive(true)
     }
 
     private func requestMicrophonePermission() async -> Bool {
