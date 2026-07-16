@@ -2,6 +2,22 @@ import XCTest
 @testable import VoiceJournal
 
 final class JournalProcessorTests: XCTestCase {
+    func testSilentRecordingIsNotConsideredSpeech() async {
+        let wavData = makeTestWAV(samples: Array(repeating: 0, count: 44_100))
+        let isAudible = await MainActor.run { AudioRecorder.containsAudibleSpeech(wavData) }
+        XCTAssertFalse(isAudible)
+    }
+
+    func testSustainedVoiceLevelAudioIsConsideredSpeech() async {
+        let samples = (0..<44_100).map { index -> Int16 in
+            let wave = sin(Double(index) * 2 * .pi * 220 / 44_100)
+            return Int16(wave * 2_400)
+        }
+        let wavData = makeTestWAV(samples: samples)
+        let isAudible = await MainActor.run { AudioRecorder.containsAudibleSpeech(wavData) }
+        XCTAssertTrue(isAudible)
+    }
+
     func testEnglishCleanupRemovesFillersAndCapitalizes() {
         let processor = JournalProcessor()
 
@@ -253,4 +269,38 @@ final class JournalProcessorTests: XCTestCase {
         components.hour = hour
         return components.date!
     }
+}
+
+private func makeTestWAV(samples: [Int16]) -> Data {
+    var pcm = Data()
+    for sample in samples {
+        var value = sample.littleEndian
+        Swift.withUnsafeBytes(of: &value) { pcm.append(contentsOf: $0) }
+    }
+
+    var wav = Data()
+    func appendASCII(_ value: String) { wav.append(value.data(using: .ascii)!) }
+    func appendUInt16(_ value: UInt16) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { wav.append(contentsOf: $0) }
+    }
+    func appendUInt32(_ value: UInt32) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { wav.append(contentsOf: $0) }
+    }
+
+    appendASCII("RIFF")
+    appendUInt32(UInt32(36 + pcm.count))
+    appendASCII("WAVEfmt ")
+    appendUInt32(16)
+    appendUInt16(1)
+    appendUInt16(1)
+    appendUInt32(44_100)
+    appendUInt32(88_200)
+    appendUInt16(2)
+    appendUInt16(16)
+    appendASCII("data")
+    appendUInt32(UInt32(pcm.count))
+    wav.append(pcm)
+    return wav
 }

@@ -119,9 +119,11 @@ final class RecorderViewModel: ObservableObject {
                 }
             } catch {
                 errorMessage = error.localizedDescription
-                if let previewDraft = makeDraftFromLivePreview(latestLiveTranscript, notice: "This journal was created from the live preview transcript.") {
+                if error as? RecordingError == .noAudibleAudio {
+                    draft = nil
+                } else if let previewDraft = makeDraftFromLivePreview(latestLiveTranscript, notice: "This journal was created from the live preview transcript.") {
                     draft = previewDraft
-                } else if error as? RecordingError != .noAudibleAudio {
+                } else {
                     draft = JournalDraft(
                         title: "Untitled Journal",
                         body: "",

@@ -2486,8 +2486,9 @@ private struct FutureLetterComposerView: View {
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Delivery", systemImage: "clock")
-                .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
-                .foregroundStyle(.primary)
+                .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .imageScale(.small)
 
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
                 .onChange(of: deliveryDate) { _, _ in
@@ -2512,7 +2513,7 @@ private struct FutureLetterComposerView: View {
         }
         .padding(18)
         .background(AppThemeCardBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .simultaneousGesture(
             TapGesture().onEnded {
                 deactivateTextEditing()
@@ -2924,11 +2925,11 @@ private struct FutureLetterDeliveryDatePicker: View {
             .datePickerStyle(.compact)
             .tint(Color.accentColor)
         }
-        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(AppThemeBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
@@ -2947,7 +2948,7 @@ private struct FutureLetterDeliveryMethodPicker: View {
         }
         .padding(4)
         .background(AppThemeBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .accessibilityElement(children: .contain)
     }
 
@@ -2956,15 +2957,15 @@ private struct FutureLetterDeliveryMethodPicker: View {
             selection = method
         } label: {
             Text(title)
-                .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                .foregroundStyle(selection == method ? Color.white : Color.primary)
+                .font(selectedFontDesignPreference.font(.callout, weight: .semibold))
+                .foregroundStyle(selection == method ? Color.white : Color.accentColor)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+                .padding(.vertical, 9)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(selection == method ? Color.accentColor : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 13))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityAddTraits(selection == method ? .isSelected : [])
     }
 
@@ -3433,8 +3434,9 @@ private struct FutureLetterDetailView: View {
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Delivery", systemImage: "clock")
-                .font(selectedFontDesignPreference.font(.title3, weight: .semibold))
-                .foregroundStyle(.primary)
+                .font(selectedFontDesignPreference.font(.subheadline, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .imageScale(.small)
 
             FutureLetterDeliveryDatePicker(date: $deliveryDate)
                 .onChange(of: deliveryDate) { _, _ in
@@ -3459,7 +3461,7 @@ private struct FutureLetterDetailView: View {
         }
         .padding(18)
         .background(AppThemeCardBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .simultaneousGesture(
             TapGesture().onEnded {
                 deactivateTextEditing()
@@ -3865,139 +3867,83 @@ private struct ThemeCloudView: View {
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     let themes: [(theme: String, count: Int)]
 
-    private var rankedCounts: [Int] {
-        Array(Set(displayThemes.map(\.count))).sorted(by: >)
-    }
-
     private var displayThemes: [(theme: String, count: Int)] {
         Array(themes.prefix(10))
     }
 
+    private var rankedCounts: [Int] {
+        Array(Set(displayThemes.map(\.count))).sorted(by: >)
+    }
+
     private var mainTheme: (theme: String, count: Int)? {
         displayThemes.max { first, second in
-            if first.count == second.count {
-                return first.theme > second.theme
-            }
-            return first.count < second.count
+            first.count == second.count ? first.theme > second.theme : first.count < second.count
         }
     }
 
-    private var surroundingThemes: [(theme: String, count: Int)] {
+    private var arrangedThemes: [(theme: String, count: Int)] {
         guard let mainTheme else { return [] }
-        var hasSkippedMainTheme = false
-        return displayThemes.filter { item in
-            if !hasSkippedMainTheme, item.theme == mainTheme.theme, item.count == mainTheme.count {
-                hasSkippedMainTheme = true
+        var skippedMain = false
+        let surrounding = displayThemes.filter { item in
+            if !skippedMain, item.theme == mainTheme.theme, item.count == mainTheme.count {
+                skippedMain = true
                 return false
             }
             return true
         }
-    }
-
-    private var organicallyDistributedThemes: [(theme: String, count: Int)] {
-        surroundingThemes.sorted { first, second in
-            let firstKey = stableDistributionKey(for: first.theme)
-            let secondKey = stableDistributionKey(for: second.theme)
-            if firstKey == secondKey {
-                return first.theme.localizedCaseInsensitiveCompare(second.theme) == .orderedAscending
-            }
-            return firstKey < secondKey
+        .sorted { first, second in
+            stableKey(for: first.theme) < stableKey(for: second.theme)
         }
-    }
-
-    private var topThemes: [(theme: String, count: Int)] {
-        organicallyDistributedThemes.enumerated().compactMap { index, theme in
-            index.isMultiple(of: 2) ? theme : nil
-        }
-    }
-
-    private var bottomThemes: [(theme: String, count: Int)] {
-        organicallyDistributedThemes.enumerated().compactMap { index, theme in
-            index.isMultiple(of: 2) ? nil : theme
-        }
+        return [mainTheme] + surrounding
     }
 
     var body: some View {
-        VStack(spacing: 9) {
-            if !topThemes.isEmpty {
-                themeFlow(topThemes, startIndex: 1)
-            }
-
-            if let mainTheme {
-                Text(mainTheme.theme)
-                    .font(selectedFontDesignPreference.fixedFont(size: fontSize(for: mainTheme.count) + 4, weight: .bold))
-                    .foregroundStyle(themeColor(at: 0))
+        ThemeCloudOrbitLayout(spacing: 7) {
+            ForEach(Array(arrangedThemes.enumerated()), id: \.element.theme) { index, item in
+                let isMain = index == 0
+                let weight: Font.Weight = isMain ? .bold : (index <= 2 ? .semibold : .regular)
+                Text(item.theme)
+                    .font(selectedFontDesignPreference.fixedFont(
+                        size: fontSize(for: item.count) + (isMain ? 4 : 0),
+                        weight: weight
+                    ))
+                    .foregroundStyle(themeColor(at: index))
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .accessibilityLabel(mainTheme.theme)
-            }
-
-            if !bottomThemes.isEmpty {
-                themeFlow(bottomThemes, startIndex: topThemes.count + 1)
+                    .rotationEffect(.degrees(isMain ? 0 : rotation(for: item.theme)))
+                    .accessibilityLabel(item.theme)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 2)
         .clipped()
         .animation(.easeInOut(duration: 0.2), value: displayThemes.map(\.theme))
     }
 
-    private func stableDistributionKey(for theme: String) -> UInt64 {
+    private func stableKey(for theme: String) -> UInt64 {
         theme.unicodeScalars.reduce(14_695_981_039_346_656_037) { hash, scalar in
             (hash ^ UInt64(scalar.value)) &* 1_099_511_628_211
         }
     }
 
-    private func fontSize(for count: Int) -> CGFloat {
-        guard rankedCounts.count > 1 else {
-            return 24
-        }
-
-        let rank = rankedCounts.firstIndex(of: count) ?? rankedCounts.count - 1
-        let sizes: [CGFloat] = [24, 21.5, 19.5, 17.5, 16, 15, 14]
-        if rank < sizes.count {
-            return sizes[rank]
-        }
-
-        return 13
+    private func rotation(for theme: String) -> Double {
+        let angles: [Double] = [-7, 5, -3, 8, -5, 3, 6, -8, 4]
+        return angles[Int(stableKey(for: theme) % UInt64(angles.count))]
     }
 
-    private func themeFlow(_ items: [(theme: String, count: Int)], startIndex: Int) -> some View {
-        ThemeCloudFlowLayout(spacing: 9, lineSpacing: 10) {
-            ForEach(Array(items.enumerated()), id: \.element.theme) { index, item in
-                let displayIndex = startIndex + index
-                let weight = displayIndex <= 2 ? Font.Weight.semibold : .regular
-                Text(item.theme)
-                    .fontWeight(weight)
-                    .foregroundStyle(themeColor(at: displayIndex))
-                    .font(selectedFontDesignPreference.fixedFont(size: fontSize(for: item.count), weight: weight))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                    .padding(.horizontal, 1)
-                    .accessibilityLabel(item.theme)
-            }
-        }
+    private func fontSize(for count: Int) -> CGFloat {
+        guard rankedCounts.count > 1 else { return 24 }
+        let rank = rankedCounts.firstIndex(of: count) ?? rankedCounts.count - 1
+        let sizes: [CGFloat] = [24, 21.5, 19.5, 17.5, 16, 15, 14]
+        return rank < sizes.count ? sizes[rank] : 13
     }
 
     private func themeColor(at index: Int) -> Color {
         let colors: [Color] = [
             .accentColor,
-            Color(hex: "#2A9D8F"),
-            Color(hex: "#E76F51"),
-            Color(hex: "#5E60CE"),
-            Color(hex: "#D18400"),
-            Color(hex: "#0077B6"),
-            Color(hex: "#C44569"),
-            Color(hex: "#4D908E"),
-            Color(hex: "#9B5DE5"),
-            Color(hex: "#F15BB5"),
-            Color(hex: "#0081A7"),
-            Color(hex: "#BC6C25"),
-            Color(hex: "#577590"),
-            Color(hex: "#6A994E"),
-            Color(hex: "#B5179E"),
-            Color(hex: "#F77F00")
+            Color(hex: "#2A9D8F"), Color(hex: "#E76F51"), Color(hex: "#5E60CE"),
+            Color(hex: "#D18400"), Color(hex: "#0077B6"), Color(hex: "#C44569"),
+            Color(hex: "#4D908E"), Color(hex: "#9B5DE5"), Color(hex: "#F15BB5")
         ]
         return colors[index % colors.count]
     }
@@ -4007,79 +3953,74 @@ private struct ThemeCloudView: View {
     }
 }
 
-private struct ThemeCloudFlowLayout: Layout {
+private struct ThemeCloudOrbitLayout: Layout {
     var spacing: CGFloat
-    var lineSpacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 320
-        let rows = makeRows(width: width, subviews: subviews)
-        let height = rows.reduce(CGFloat.zero) { partial, row in
-            partial + row.height
-        } + CGFloat(max(rows.count - 1, 0)) * lineSpacing
-        return CGSize(width: width, height: height)
+        proposal.replacingUnspecifiedDimensions(by: CGSize(width: 320, height: 230))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = makeRows(width: bounds.width, subviews: subviews)
-        let totalHeight = rows.reduce(CGFloat.zero) { partial, row in
-            partial + row.height
-        } + CGFloat(max(rows.count - 1, 0)) * lineSpacing
-        var y = bounds.midY - totalHeight / 2
+        guard !subviews.isEmpty else { return }
 
-        for row in rows {
-            var x = bounds.midX - row.width / 2
-            for item in row.items {
-                let size = item.size
-                subviews[item.index].place(
-                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
-                    proposal: ProposedViewSize(width: size.width, height: size.height)
-                )
-                x += size.width + spacing
-            }
-            y += row.height + lineSpacing
-        }
-    }
+        let mainSize = subviews[0].sizeThatFits(.unspecified)
+        let mainCenter = CGPoint(x: bounds.midX, y: bounds.midY)
+        subviews[0].place(at: mainCenter, anchor: .center, proposal: ProposedViewSize(mainSize))
 
-    private func makeRows(width: CGFloat, subviews: Subviews) -> [ThemeCloudRow] {
-        var rows: [ThemeCloudRow] = []
-        var currentItems: [ThemeCloudRow.Item] = []
-        var currentWidth: CGFloat = 0
-        var currentHeight: CGFloat = 0
+        var occupied = [rect(centeredAt: mainCenter, size: mainSize).insetBy(dx: -spacing, dy: -spacing)]
+        let candidates = candidateCenters(in: bounds)
 
-        for index in subviews.indices {
+        for index in subviews.indices.dropFirst() {
             let size = subviews[index].sizeThatFits(.unspecified)
-            let nextWidth = currentItems.isEmpty ? size.width : currentWidth + spacing + size.width
+            let orderedCandidates = rotatedCandidates(candidates, offset: (index - 1) * 3)
+            let placements = orderedCandidates.map { clampedCenter($0, size: size, in: bounds) }
+            let center = placements.first { candidate in
+                let candidateRect = rect(centeredAt: candidate, size: size).insetBy(dx: -spacing, dy: -spacing)
+                return occupied.allSatisfy { !$0.intersects(candidateRect) }
+            } ?? placements.min { first, second in
+                overlapArea(of: rect(centeredAt: first, size: size), with: occupied) <
+                overlapArea(of: rect(centeredAt: second, size: size), with: occupied)
+            } ?? mainCenter
 
-            if nextWidth > width, !currentItems.isEmpty {
-                rows.append(ThemeCloudRow(items: currentItems, width: currentWidth, height: currentHeight))
-                currentItems = [ThemeCloudRow.Item(index: index, size: size)]
-                currentWidth = size.width
-                currentHeight = size.height
-            } else {
-                currentItems.append(ThemeCloudRow.Item(index: index, size: size))
-                currentWidth = nextWidth
-                currentHeight = max(currentHeight, size.height)
-            }
+            subviews[index].place(at: center, anchor: .center, proposal: ProposedViewSize(size))
+            occupied.append(rect(centeredAt: center, size: size).insetBy(dx: -spacing, dy: -spacing))
         }
-
-        if !currentItems.isEmpty {
-            rows.append(ThemeCloudRow(items: currentItems, width: currentWidth, height: currentHeight))
-        }
-
-        return rows
-    }
-}
-
-private struct ThemeCloudRow {
-    struct Item {
-        let index: Int
-        let size: CGSize
     }
 
-    let items: [Item]
-    let width: CGFloat
-    let height: CGFloat
+    private func candidateCenters(in bounds: CGRect) -> [CGPoint] {
+        let positions: [(CGFloat, CGFloat)] = [
+            (0.22, 0.20), (0.77, 0.77), (0.76, 0.22), (0.21, 0.75),
+            (0.50, 0.13), (0.14, 0.48), (0.86, 0.50), (0.49, 0.87),
+            (0.34, 0.34), (0.68, 0.65), (0.67, 0.36), (0.33, 0.66)
+        ]
+        return positions.map { x, y in
+            CGPoint(x: bounds.minX + bounds.width * x, y: bounds.minY + bounds.height * y)
+        }
+    }
+
+    private func rotatedCandidates(_ candidates: [CGPoint], offset: Int) -> [CGPoint] {
+        guard !candidates.isEmpty else { return [] }
+        let start = offset % candidates.count
+        return Array(candidates[start...]) + Array(candidates[..<start])
+    }
+
+    private func clampedCenter(_ center: CGPoint, size: CGSize, in bounds: CGRect) -> CGPoint {
+        CGPoint(
+            x: min(max(center.x, bounds.minX + size.width / 2), bounds.maxX - size.width / 2),
+            y: min(max(center.y, bounds.minY + size.height / 2), bounds.maxY - size.height / 2)
+        )
+    }
+
+    private func rect(centeredAt center: CGPoint, size: CGSize) -> CGRect {
+        CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
+    }
+
+    private func overlapArea(of rect: CGRect, with occupied: [CGRect]) -> CGFloat {
+        occupied.reduce(0) { total, other in
+            let intersection = rect.intersection(other)
+            return total + (intersection.isNull ? 0 : intersection.width * intersection.height)
+        }
+    }
 }
 
 private enum BackendStatus {

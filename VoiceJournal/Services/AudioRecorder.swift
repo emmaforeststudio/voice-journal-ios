@@ -69,9 +69,12 @@ final class AudioRecorder: NSObject, ObservableObject {
         self.recordingURL = nil
         isRecording = false
         inputLevel = 0
+        hasDetectedAudio = false
         try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
-        guard recordedDuration > 0.35 else {
+        let recordedData = try? Data(contentsOf: recordingURL)
+        guard recordedDuration > 0.6,
+              recordedData.map(Self.containsAudibleSpeech) == true else {
             deleteRecording(at: recordingURL)
             throw RecordingError.noAudibleAudio
         }
@@ -128,6 +131,48 @@ final class AudioRecorder: NSObject, ObservableObject {
             return nil
         }
         return markerRange.upperBound + 4
+    }
+
+    static func containsAudibleSpeech(_ wavData: Data) -> Bool {
+        guard let dataOffset = wavDataOffset(in: wavData), wavData.count > dataOffset else {
+            return false
+        }
+
+        let pcmData = wavData[dataOffset...]
+        let sampleCount = pcmData.count / MemoryLayout<Int16>.size
+        let samplesPerWindow = 4_410
+        guard sampleCount >= samplesPerWindow else { return false }
+
+        var audibleWindows = 0
+        return pcmData.withUnsafeBytes { bytes in
+            for windowStart in stride(from: 0, to: sampleCount, by: samplesPerWindow) {
+                let windowEnd = min(windowStart + samplesPerWindow, sampleCount)
+                guard windowEnd - windowStart >= samplesPerWindow / 2 else { continue }
+
+                var squaredAmplitude = 0.0
+                var strongSamples = 0
+                for sampleIndex in windowStart..<windowEnd {
+                    let byteIndex = sampleIndex * 2
+                    let rawSample = UInt16(bytes[byteIndex]) | UInt16(bytes[byteIndex + 1]) << 8
+                    let sample = Double(Int16(bitPattern: rawSample)) / Double(Int16.max)
+                    squaredAmplitude += sample * sample
+                    if abs(sample) >= 0.012 {
+                        strongSamples += 1
+                    }
+                }
+
+                let windowSampleCount = Double(windowEnd - windowStart)
+                let rms = sqrt(squaredAmplitude / windowSampleCount)
+                let strongSampleRatio = Double(strongSamples) / windowSampleCount
+                if rms >= 0.006, strongSampleRatio >= 0.015 {
+                    audibleWindows += 1
+                    if audibleWindows >= 2 {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
     }
 
     private static func alignedByteOffset(for time: TimeInterval, byteRate: Int, blockAlign: Int) -> Int {
