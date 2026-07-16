@@ -2493,8 +2493,21 @@ private struct FutureLetterComposerView: View {
                     .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                deliveryMethodButton(.inAppNotification, subtitle: "Schedule a private local reminder on this iPhone.", isEnabled: true)
-                deliveryMethodButton(.email, subtitle: "Deliver the full letter to a verified email address.", isEnabled: true)
+                Picker("Delivery Method", selection: $deliveryMethod) {
+                    Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
+                    Text("Email").tag(FutureLetterDeliveryMethod.email)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: deliveryMethod) { _, _ in
+                    deactivateTextEditing()
+                    message = nil
+                }
+
+                Text(deliveryMethod == .email
+                     ? "The full letter will be emailed to the verified address."
+                     : "The letter will be delivered as a notification on this iPhone.")
+                    .font(selectedFontDesignPreference.font(.caption))
+                    .foregroundStyle(.secondary)
 
                 if deliveryMethod == .email {
                     FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
@@ -2509,37 +2522,6 @@ private struct FutureLetterComposerView: View {
                 deactivateTextEditing()
             }
         )
-    }
-
-    private func deliveryMethodButton(_ method: FutureLetterDeliveryMethod, subtitle: String, isEnabled: Bool) -> some View {
-        Button {
-            deactivateTextEditing()
-            if isEnabled {
-                deliveryMethod = method
-                message = nil
-            } else {
-                message = "Email delivery needs a backend email provider before it can be enabled."
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: deliveryMethod == method ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(method.displayName)
-                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                        .foregroundStyle(isEnabled ? .primary : .secondary)
-                    Text(subtitle)
-                        .font(selectedFontDesignPreference.font(.caption))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     private var actionButtons: some View {
@@ -2557,7 +2539,7 @@ private struct FutureLetterComposerView: View {
             Button {
                 saveLetter(shouldSchedule: true)
             } label: {
-                Text("Schedule")
+                Text(deliveryMethod == .email ? "Schedule Email" : "Schedule In-App")
                     .font(selectedFontDesignPreference.font(.body, weight: .semibold))
                     .frame(maxWidth: .infinity)
             }
@@ -2706,14 +2688,16 @@ private struct FutureLetterComposerView: View {
 
     private func saveLetter(shouldSchedule: Bool) {
         focusedField = nil
+        let selectedMethod = deliveryMethod
+        let selectedEmail = normalizedEmail(emailAddress)
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         let letter = FutureLetter(
             title: trimmedTitle,
             body: trimmedBody,
             deliveryDate: deliveryDate,
-            deliveryMethod: deliveryMethod,
-            recipientEmail: deliveryMethod == .email ? normalizedEmail(emailAddress) : nil
+            deliveryMethod: selectedMethod,
+            recipientEmail: selectedMethod == .email ? selectedEmail : nil
         )
 
         Task {
@@ -2721,15 +2705,17 @@ private struct FutureLetterComposerView: View {
                 var resultMessage = "Letter saved."
                 if shouldSchedule {
                     do {
-                        if deliveryMethod == .email {
-                            let status = try await FutureLetterEmailService().schedule(letter: letter, email: emailAddress)
+                        if letter.deliveryMethod == .email {
+                            FutureLetterNotificationScheduler.removeLocalDelivery(for: letter)
+                            let status = try await FutureLetterEmailService().schedule(letter: letter, email: selectedEmail)
                             letter.notificationIdentifier = "email-\(letter.id.uuidString.lowercased())"
                             letter.remoteDeliveryStatusRawValue = status.rawValue
+                            resultMessage = "Email scheduled to \(selectedEmail)."
                         } else {
                             let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
                             letter.notificationIdentifier = notificationID
+                            resultMessage = "In-app notification scheduled."
                         }
-                        resultMessage = "Letter scheduled."
                     } catch {
                         resultMessage = "Letter saved as a draft. It was not scheduled: \(error.localizedDescription)"
                     }
@@ -3402,8 +3388,21 @@ private struct FutureLetterDetailView: View {
                     .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                deliveryMethodButton(.inAppNotification, subtitle: "Schedule a private local reminder on this iPhone.", isEnabled: true)
-                deliveryMethodButton(.email, subtitle: "Deliver the full letter to a verified email address.", isEnabled: true)
+                Picker("Delivery Method", selection: $deliveryMethod) {
+                    Text("In-App").tag(FutureLetterDeliveryMethod.inAppNotification)
+                    Text("Email").tag(FutureLetterDeliveryMethod.email)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: deliveryMethod) { _, _ in
+                    deactivateTextEditing()
+                    message = nil
+                }
+
+                Text(deliveryMethod == .email
+                     ? "The full letter will be emailed to the verified address."
+                     : "The letter will be delivered as a notification on this iPhone.")
+                    .font(selectedFontDesignPreference.font(.caption))
+                    .foregroundStyle(.secondary)
 
                 if deliveryMethod == .email {
                     FutureLetterEmailSetupView(email: $emailAddress, verifiedEmail: $verifiedEmail)
@@ -3418,37 +3417,6 @@ private struct FutureLetterDetailView: View {
                 deactivateTextEditing()
             }
         )
-    }
-
-    private func deliveryMethodButton(_ method: FutureLetterDeliveryMethod, subtitle: String, isEnabled: Bool) -> some View {
-        Button {
-            deactivateTextEditing()
-            if isEnabled {
-                deliveryMethod = method
-                message = nil
-            } else {
-                message = "Email delivery needs a backend email provider before it can be enabled."
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: deliveryMethod == method ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isEnabled ? Color.accentColor : .secondary)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(method.displayName)
-                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
-                        .foregroundStyle(isEnabled ? .primary : .secondary)
-                    Text(subtitle)
-                        .font(selectedFontDesignPreference.font(.caption))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     private var actionButtons: some View {
@@ -3466,7 +3434,7 @@ private struct FutureLetterDetailView: View {
             Button {
                 saveChanges(shouldSchedule: true)
             } label: {
-                Text("Schedule")
+                Text(deliveryMethod == .email ? "Schedule Email" : "Schedule In-App")
                     .font(selectedFontDesignPreference.font(.body, weight: .semibold))
                     .frame(maxWidth: .infinity)
             }
@@ -3566,6 +3534,8 @@ private struct FutureLetterDetailView: View {
 
     private func saveChanges(shouldSchedule: Bool) {
         focusedField = nil
+        let selectedMethod = deliveryMethod
+        let selectedEmail = normalizedEmail(emailAddress)
         if let notificationIdentifier = letter.notificationIdentifier {
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationIdentifier])
             letter.notificationIdentifier = nil
@@ -3574,8 +3544,8 @@ private struct FutureLetterDetailView: View {
         letter.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         letter.body = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
         letter.deliveryDate = deliveryDate
-        letter.deliveryMethod = deliveryMethod
-        letter.recipientEmail = deliveryMethod == .email ? normalizedEmail(emailAddress) : nil
+        letter.deliveryMethod = selectedMethod
+        letter.recipientEmail = selectedMethod == .email ? selectedEmail : nil
         letter.remoteDeliveryStatusRawValue = nil
         letter.remoteDeliveredAt = nil
         letter.updatedAt = Date()
@@ -3585,15 +3555,17 @@ private struct FutureLetterDetailView: View {
                 var resultMessage = "Letter saved."
                 if shouldSchedule {
                     do {
-                        if deliveryMethod == .email {
-                            let status = try await FutureLetterEmailService().schedule(letter: letter, email: emailAddress)
+                        if letter.deliveryMethod == .email {
+                            FutureLetterNotificationScheduler.removeLocalDelivery(for: letter)
+                            let status = try await FutureLetterEmailService().schedule(letter: letter, email: selectedEmail)
                             letter.notificationIdentifier = "email-\(letter.id.uuidString.lowercased())"
                             letter.remoteDeliveryStatusRawValue = status.rawValue
+                            resultMessage = "Email scheduled to \(selectedEmail)."
                         } else {
                             let notificationID = try await FutureLetterNotificationScheduler.schedule(letter: letter)
                             letter.notificationIdentifier = notificationID
+                            resultMessage = "In-app notification scheduled."
                         }
-                        resultMessage = "Letter scheduled."
                     } catch {
                         resultMessage = "Letter saved as a draft. It was not scheduled: \(error.localizedDescription)"
                     }
@@ -3628,6 +3600,10 @@ enum FutureLetterNotificationScheduler {
     }
 
     static func schedule(letter: FutureLetter) async throws -> String {
+        guard letter.deliveryMethod == .inAppNotification else {
+            throw FutureLetterError.emailCannotUseLocalNotification
+        }
+
         let center = UNUserNotificationCenter.current()
         _ = try await verifiedNotificationSettings(center)
 
@@ -3662,13 +3638,23 @@ enum FutureLetterNotificationScheduler {
         return identifier
     }
 
+    static func removeLocalDelivery(for letter: FutureLetter) {
+        let expectedIdentifier = "future-letter-\(letter.id.uuidString)"
+        let identifiers = Array(Set([expectedIdentifier, letter.notificationIdentifier].compactMap { $0 }))
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
     @MainActor
     static func synchronize(letters: [FutureLetter]) async -> Bool {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         let delivered = await center.deliveredNotifications()
         let pendingByID = Dictionary(uniqueKeysWithValues: pending.map { ($0.identifier, $0) })
-        let scheduledLetters = letters.filter { $0.notificationIdentifier != nil }
+        let scheduledLetters = letters.filter {
+            $0.deliveryMethod == .inAppNotification && $0.notificationIdentifier != nil
+        }
         let validIDs = Set(scheduledLetters.compactMap(\.notificationIdentifier))
         let orphanedIDs = pending.map(\.identifier).filter {
             $0.hasPrefix("future-letter-") && !validIDs.contains($0)
@@ -3779,6 +3765,7 @@ private enum FutureLetterError: LocalizedError {
     case notificationScheduledSummaryEnabled
     case notificationRequestNotRegistered
     case scheduledTimeTooSoon
+    case emailCannotUseLocalNotification
 
     var errorDescription: String? {
         switch self {
@@ -3791,7 +3778,9 @@ private enum FutureLetterError: LocalizedError {
         case .notificationRequestNotRegistered:
             "The notification could not be added to iOS. Please try scheduling it again."
         case .scheduledTimeTooSoon:
-            "Choose a delivery time at least a few seconds in the future."
+            "Choose a delivery time at least one minute in the future."
+        case .emailCannotUseLocalNotification:
+            "Email letters cannot be scheduled as in-app notifications."
         }
     }
 }
