@@ -8,6 +8,16 @@ final class JournalProcessorTests: XCTestCase {
         XCTAssertFalse(isAudible)
     }
 
+    func testDetectedMicrophoneActivityIsTranscribedEvenWhenFileAnalysisIsQuiet() async {
+        let wavData = makeTestWAV(samples: Array(repeating: 0, count: 44_100 * 15))
+        let shouldTranscribe = await MainActor.run {
+            AudioRecorder.shouldTranscribe(
+                recordedDuration: 15, detectedAudioDuringRecording: true, wavData: wavData
+            )
+        }
+        XCTAssertTrue(shouldTranscribe)
+    }
+
     func testSustainedVoiceLevelAudioIsConsideredSpeech() async {
         let samples = (0..<44_100).map { index -> Int16 in
             let wave = sin(Double(index) * 2 * .pi * 220 / 44_100)

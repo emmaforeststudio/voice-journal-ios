@@ -64,6 +64,7 @@ final class AudioRecorder: NSObject, ObservableObject {
         meterTask?.cancel()
         meterTask = nil
         let recordedDuration = audioRecorder.currentTime
+        let detectedAudioDuringRecording = hasDetectedAudio
         audioRecorder.stop()
         self.audioRecorder = nil
         self.recordingURL = nil
@@ -73,8 +74,11 @@ final class AudioRecorder: NSObject, ObservableObject {
         try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         let recordedData = try? Data(contentsOf: recordingURL)
-        guard recordedDuration > 0.6,
-              recordedData.map(Self.containsAudibleSpeech) == true else {
+        guard Self.shouldTranscribe(
+            recordedDuration: recordedDuration,
+            detectedAudioDuringRecording: detectedAudioDuringRecording,
+            wavData: recordedData
+        ) else {
             deleteRecording(at: recordingURL)
             throw RecordingError.noAudibleAudio
         }
@@ -131,6 +135,16 @@ final class AudioRecorder: NSObject, ObservableObject {
             return nil
         }
         return markerRange.upperBound + 4
+    }
+
+    static func shouldTranscribe(
+        recordedDuration: TimeInterval,
+        detectedAudioDuringRecording: Bool,
+        wavData: Data?
+    ) -> Bool {
+        guard recordedDuration > 0.35 else { return false }
+        if detectedAudioDuringRecording { return true }
+        return wavData.map(containsAudibleSpeech) == true
     }
 
     static func containsAudibleSpeech(_ wavData: Data) -> Bool {
