@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createJournalHandler } from "./journal-core.mjs";
+import { createJournalHandler, preserveOriginalScriptText } from "./journal-core.mjs";
 
 const mixedTranscript = "Today 我很开心 그리고 mañana je vais bien.";
 
@@ -20,10 +20,12 @@ test("preview sends direct audio with the multilingual transcription prompt", as
     fetchImpl: async (url, options) => {
       assert.equal(url, "https://api.openai.com/v1/audio/transcriptions");
       assert.equal(options.method, "POST");
-      assert.equal(options.body.get("model"), "gpt-4o-mini-transcribe");
+      assert.equal(options.body.get("model"), "gpt-4o-transcribe");
       assert.equal(options.body.get("response_format"), "json");
       assert.match(options.body.get("prompt"), /English, Chinese, Korean, Spanish, French, German, and Japanese/);
       assert.match(options.body.get("prompt"), /Do not translate mixed-language speech/);
+      assert.match(options.body.get("prompt"), /one or two words/);
+      assert.match(options.body.get("prompt"), /괜찮아요/);
       assert.ok(options.body.get("file") instanceof Blob);
       inspected = true;
       return Response.json({ text: mixedTranscript });
@@ -34,6 +36,18 @@ test("preview sends direct audio with the multilingual transcription prompt", as
   assert.equal(response.status, 200);
   assert.equal((await response.json()).transcript, mixedTranscript);
   assert.equal(inspected, true);
+});
+
+test("cleanup cannot remove short Chinese or Korean fragments from a transcript", () => {
+  const transcript = "Today 我很开心 그리고 괜찮아요 before work.";
+  assert.equal(
+    preserveOriginalScriptText("Today I was happy before work.", transcript),
+    transcript
+  );
+  assert.equal(
+    preserveOriginalScriptText("Today 我很开心 그리고 괜찮아요 before work.", transcript),
+    transcript
+  );
 });
 
 test("journal completion preserves mixed-language text through transcription and cleanup", async () => {

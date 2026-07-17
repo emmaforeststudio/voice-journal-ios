@@ -1,5 +1,6 @@
 const maxBodyBytes = 20 * 1024 * 1024;
 const previewSessionTTL = 30 * 60 * 1000;
+const transcriptionModel = "gpt-4o-transcribe";
 
 const supportedMoodEmojis = ["🙂", "😊", "🥲", "😌", "😔", "😤", "🥰", "🤔", "😴", "✨"];
 const supportedLanguages = [
@@ -153,16 +154,19 @@ function decodeBase64(value) {
 
 async function transcribe(audio, { apiKey, fetchImpl, allowEmpty = false }) {
   const form = new FormData();
-  form.append("model", "gpt-4o-mini-transcribe");
+  form.append("model", transcriptionModel);
   form.append("response_format", "json");
   form.append(
     "prompt",
     [
-      "This is a personal journal entry.",
+      "This is a verbatim transcription of a personal journal, not a translation.",
       "The speaker may code-switch or mix English, Chinese, Korean, Spanish, French, German, and Japanese within the same sentence.",
-      "Transcribe exactly what is spoken, preserving each language in its original script when clear.",
+      "A language switch may last only one or two words; preserve even these very short switches in the language actually spoken.",
+      "Transcribe exactly what is spoken and do not infer the output language from the dominant language of the sentence.",
       "Keep Korean in Hangul, Japanese in kana/kanji, Chinese in hanzi, and accented Latin text when spoken.",
-      "Do not translate mixed-language speech into one language.",
+      "For example, transcribe 'I feel 很开心 today' with 很开心 intact, never as 'very happy'; preserve '괜찮아요' in Hangul rather than translating or omitting it.",
+      "When pronunciation is imperfect or uncertain, write the closest words in the language being spoken rather than translating them, replacing them with English, or deleting them.",
+      "Do not translate mixed-language speech into one language and do not omit minority-language fragments.",
       "Preserve proper nouns, app names, and informal wording accurately.",
     ].join(" ")
   );
@@ -291,8 +295,10 @@ async function polishJournal(transcript, livePreviewTranscript = "", { apiKey, f
             "Correct obvious transcription mistakes only when context makes the correction clear.",
             "Preserve the writer's meaning, facts, emotional tone, and first-person voice.",
             "The speaker may intentionally mix English, Chinese, Korean, Spanish, French, German, and Japanese, even inside one sentence.",
+            "A switch may be only one or two words and is still intentional content, not a filler or transcription error.",
             "Preserve each spoken language in its original script: keep Korean in Hangul, Japanese in kana/kanji, Chinese in hanzi, and accented Latin text when present.",
             "Never translate, romanize, or replace mixed-language phrases with the dominant language.",
+            "Treat every Chinese, Korean, and Japanese script fragment in either source as protected verbatim text: do not remove or rewrite it.",
             "Do not invent events, advice, interpretations, or details.",
             "The final audio transcription is the primary source.",
             "The latest live preview is a recovery source that may contain earlier speech omitted from the final transcription.",
@@ -357,12 +363,27 @@ async function polishJournal(transcript, livePreviewTranscript = "", { apiKey, f
   }
 
   const journal = JSON.parse(content);
+  const polishedBody = preserveOriginalScriptText(journal.body.trim(), transcript);
   return {
     title: journal.title,
-    body: journal.body.trim(),
+    body: polishedBody,
     emoji: journal.emoji,
     language: journal.language,
   };
+}
+
+export function preserveOriginalScriptText(polishedBody, transcript) {
+  const edited = typeof polishedBody === "string" ? polishedBody.trim() : "";
+  const source = typeof transcript === "string" ? transcript.trim() : "";
+  if (!source) return edited;
+
+  const protectedSegments = source.match(
+    /[\p{Script=Han}\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}]+/gu
+  ) ?? [];
+  if (protectedSegments.some((segment) => !edited.includes(segment))) {
+    return source;
+  }
+  return edited;
 }
 
 async function structureJournalBody(body, { apiKey, fetchImpl }) {
