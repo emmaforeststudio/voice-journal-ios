@@ -408,7 +408,9 @@ private struct VoiceJournalSettingsView: View {
     @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @AppStorage("insightsMemoryCardMode") private var insightsMemoryCardMode = InsightsMemoryCardMode.onThisDay.rawValue
-    @AppStorage("showLivePreview") private var showLivePreview = true
+    @AppStorage("showLivePreview") private var showLivePreview = false
+    @AppStorage("transcriptOutputMode") private var transcriptOutputMode = TranscriptOutputMode.asSpoken.rawValue
+    @AppStorage("translationTargetLanguage") private var translationTargetLanguage = TranslationLanguage.english.rawValue
     @AppStorage("futureLetterEmailAddress") private var futureLetterEmailAddress = ""
 
     @State private var requestedFaceIDLock = false
@@ -434,16 +436,28 @@ private struct VoiceJournalSettingsView: View {
 
                 FontSizePicker(selection: $journalFontPreference)
                     .listRowBackground(AppThemeCardBackground())
+            } header: {
+                Text("Appearance")
+                    .font(selectedFontDesignPreference.unscaledFont(.subheadline, weight: .semibold))
+            }
+            .listRowBackground(AppThemeCardBackground())
 
-                MemoryCardModePicker(selection: $insightsMemoryCardMode)
-                    .listRowBackground(AppThemeCardBackground())
-
+            Section {
                 Toggle(isOn: $showLivePreview) {
                     SettingsRowLabel(title: "Live Preview While Recording", imageName: "icon-live-preview")
                 }
                 .listRowBackground(AppThemeCardBackground())
+
+                TranscriptOutputPicker(
+                    modeSelection: $transcriptOutputMode,
+                    languageSelection: $translationTargetLanguage
+                )
+                .listRowBackground(AppThemeCardBackground())
+
+                MemoryCardModePicker(selection: $insightsMemoryCardMode)
+                    .listRowBackground(AppThemeCardBackground())
             } header: {
-                Text("Appearance")
+                Text("Journaling")
                     .font(selectedFontDesignPreference.unscaledFont(.subheadline, weight: .semibold))
             }
             .listRowBackground(AppThemeCardBackground())
@@ -524,6 +538,13 @@ private struct VoiceJournalSettingsView: View {
                 .disabled(entries.isEmpty)
                 .listRowBackground(AppThemeCardBackground())
 
+                Button(role: .destructive) {
+                    isShowingDeleteAccountConfirmation = true
+                } label: {
+                    SettingsRowLabel(title: "Delete All App Data", imageName: "icon-delete-account", foregroundColor: .red)
+                }
+                .listRowBackground(AppThemeCardBackground())
+
                 if let importMessage {
                     Text(importMessage)
                         .font(selectedFontPreference.font(.caption, design: selectedFontDesignPreference))
@@ -550,15 +571,6 @@ private struct VoiceJournalSettingsView: View {
             }
             .listRowBackground(AppThemeCardBackground())
 
-            Section {
-                Button(role: .destructive) {
-                    isShowingDeleteAccountConfirmation = true
-                } label: {
-                    SettingsRowLabel(title: "Delete All App Data", imageName: "icon-delete-account", foregroundColor: .red)
-                }
-                .listRowBackground(AppThemeCardBackground())
-            }
-            .listRowBackground(AppThemeCardBackground())
         }
         .scrollContentBackground(.hidden)
         .background(AppThemeBackground())
@@ -1756,6 +1768,166 @@ private struct MemoryCardModePicker: View {
     }
 }
 
+private struct TranscriptOutputPicker: View {
+    @Binding var modeSelection: String
+    @Binding var languageSelection: String
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
+    @State private var isShowingOptions = false
+
+    private var selectedMode: TranscriptOutputMode {
+        TranscriptOutputMode.value(for: modeSelection)
+    }
+
+    private var selectedLanguage: TranslationLanguage {
+        TranslationLanguage.value(for: languageSelection)
+    }
+
+    var body: some View {
+        Button {
+            isShowingOptions = true
+        } label: {
+            HStack {
+                SettingsRowLabel(
+                    title: "Transcript Output",
+                    systemImageName: "translate",
+                    iconColor: selectedTheme.primaryColor
+                )
+                Spacer(minLength: 10)
+                Text(selectedValue)
+                    .font(selectedFontPreference.font(.body, design: selectedFontDesignPreference))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Transcript Output")
+        .accessibilityValue(selectedValue)
+        .sheet(isPresented: $isShowingOptions) {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        optionRow(
+                            mode: .asSpoken,
+                            title: "Keep As Spoken",
+                            description: "For one or multiple languages. Each language stays in the words and script you used.",
+                            isRecommended: true
+                        )
+
+                        Divider()
+                            .padding(.leading, 56)
+
+                        optionRow(
+                            mode: .translate,
+                            title: "Translate Multilingual Recordings",
+                            description: "When you use multiple languages, keep the original and also create one translated version.",
+                            isRecommended: false
+                        )
+
+                        if selectedMode == .translate {
+                            Divider()
+                                .padding(.leading, 56)
+
+                            Picker("Translate to", selection: $languageSelection) {
+                                ForEach(TranslationLanguage.allCases) { language in
+                                    Text(language.displayName).tag(language.rawValue)
+                                }
+                            }
+                            .font(selectedFontPreference.font(.body, design: selectedFontDesignPreference, weight: .semibold))
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 18)
+                        }
+                    }
+                    .background(AppThemeCardBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .padding(20)
+                }
+                .background(AppThemeBackground())
+                .navigationTitle("Transcript Output")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            isShowingOptions = false
+                        }
+                    }
+                }
+            }
+            .tint(selectedTheme.primaryColor)
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    private var selectedValue: String {
+        selectedMode == .asSpoken ? "As Spoken" : selectedLanguage.displayName
+    }
+
+    private func optionRow(
+        mode: TranscriptOutputMode,
+        title: String,
+        description: String,
+        isRecommended: Bool
+    ) -> some View {
+        Button {
+            modeSelection = mode.rawValue
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: selectedMode == mode ? "largecircle.fill.circle" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selectedMode == mode ? selectedTheme.primaryColor : Color.secondary.opacity(0.28))
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(selectedFontPreference.font(.body, design: selectedFontDesignPreference, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        if isRecommended {
+                            Text("Recommended")
+                                .font(selectedFontPreference.font(.caption2, design: selectedFontDesignPreference, weight: .semibold))
+                                .foregroundStyle(selectedTheme.primaryColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(selectedTheme.primaryColor.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+
+                    Text(description)
+                        .font(selectedFontPreference.font(.callout, design: selectedFontDesignPreference))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedFontPreference: JournalFontPreference {
+        JournalFontPreference.value(for: journalFontPreference)
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+}
+
 private struct AppearanceChoiceButton: View {
     let title: String
     let isSelected: Bool
@@ -2331,6 +2503,8 @@ private struct FutureLetterComposerView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @AppStorage("futureLetterEmailAddress") private var emailAddress = ""
+    @AppStorage("transcriptOutputMode") private var transcriptOutputMode = TranscriptOutputMode.asSpoken.rawValue
+    @AppStorage("translationTargetLanguage") private var translationTargetLanguage = TranslationLanguage.english.rawValue
     @Query(sort: \FutureLetter.deliveryDate, order: .forward) private var letters: [FutureLetter]
     @StateObject private var recorder = AudioRecorder()
     @State private var title = ""
@@ -2340,10 +2514,19 @@ private struct FutureLetterComposerView: View {
     @State private var selectedCollection: FutureLetterCollection?
     @State private var isRecording = false
     @State private var isProcessingRecording = false
+    @State private var processingLimitReason: RecordingDurationLimitReason?
     @State private var compositionMode = FutureLetterCompositionMode.record
     @State private var message: String?
     @State private var verifiedEmail: String?
     @State private var currentDate = Date()
+    @State private var originalTitle = ""
+    @State private var originalBody = ""
+    @State private var translatedTitle = ""
+    @State private var translatedBody = ""
+    @State private var selectedContentVersion = TranslatedContentVersion.original
+    @State private var isTranslating = false
+    @State private var translationError: String?
+    @State private var suppressLetterVersionSync = false
     @FocusState private var focusedField: FutureLetterFocusedField?
 
     var body: some View {
@@ -2357,6 +2540,12 @@ private struct FutureLetterComposerView: View {
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { date in
             currentDate = date
+        }
+        .onChange(of: title) { _, _ in
+            syncEditedLetterVersion()
+        }
+        .onChange(of: bodyText) { _, _ in
+            syncEditedLetterVersion()
         }
         .scrollDismissesKeyboard(.interactively)
         .background {
@@ -2438,8 +2627,16 @@ private struct FutureLetterComposerView: View {
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if isProcessingRecording {
-                ProgressView("Transcribing your letter")
-                    .font(selectedFontDesignPreference.font(.callout))
+                if let processingLimitReason {
+                    RecordingLimitProcessingBanner(
+                        reason: processingLimitReason,
+                        contentName: "letter",
+                        fontDesign: selectedFontDesignPreference
+                    )
+                } else {
+                    ProgressView("Preparing your letter")
+                        .font(selectedFontDesignPreference.font(.callout))
+                }
             }
 
             if let message {
@@ -2516,6 +2713,24 @@ private struct FutureLetterComposerView: View {
                     .font(selectedFontDesignPreference.font(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .imageScale(.small)
+            }
+
+            if selectedTranscriptOutputMode == .translate {
+                FutureLetterVersionPicker(
+                    selection: selectedContentVersion,
+                    translationLanguage: selectedTranslationLanguage,
+                    isTranslating: isTranslating,
+                    translatedVersionAvailable: !translatedBody.isEmpty
+                ) { version in
+                    selectLetterVersion(version)
+                }
+
+                if let translationError {
+                    Text(translationError)
+                        .font(selectedFontDesignPreference.font(.caption))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
 
             actionButtons
@@ -2660,7 +2875,16 @@ private struct FutureLetterComposerView: View {
 
     private func startRecording() {
         message = nil
+        processingLimitReason = nil
         focusedField = nil
+        recorder.onRecordingDurationLimitReached = { reason in
+            guard isRecording else { return }
+            stopRecording(limitReason: reason)
+        }
+        recorder.onRecordingInterrupted = { reason in
+            guard isRecording else { return }
+            stopRecording(interruptionReason: reason)
+        }
         Task {
             do {
                 try await recorder.start()
@@ -2671,33 +2895,58 @@ private struct FutureLetterComposerView: View {
         }
     }
 
-    private func stopRecording() {
+    private func stopRecording(
+        limitReason: RecordingDurationLimitReason? = nil,
+        interruptionReason: RecordingInterruptionReason? = nil
+    ) {
+        processingLimitReason = limitReason
+        message = interruptionReason?.notice
         isProcessingRecording = true
         isRecording = false
+        let backgroundTask = RecordingProcessingBackgroundTask(name: "Finish letter transcription")
         Task {
+            defer { backgroundTask.finish() }
             do {
                 let url = try recorder.stop()
                 defer { recorder.deleteRecording(at: url) }
-                let transcript = try await OpenAIJournalService().previewTranscript(from: url)
-                appendTranscript(transcript)
-                message = "Recording added to your letter."
+                let draft = try await OpenAIJournalService().makeDraft(from: url)
+                applyRecordedDraft(draft)
+                message = [interruptionReason?.notice, "Your recording was cleaned and added to the letter."]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
             } catch {
                 message = error.localizedDescription
             }
             isProcessingRecording = false
+            processingLimitReason = nil
             try? await recorder.prepare()
         }
     }
 
-    private func appendTranscript(_ transcript: String) {
-        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTranscript.isEmpty else { return }
-        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        bodyText = trimmedBody.isEmpty ? trimmedTranscript : "\(trimmedBody)\n\n\(trimmedTranscript)"
+    private func applyRecordedDraft(_ draft: JournalDraft) {
+        storeActiveLetterVersion()
+        let generatedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            originalTitle = generatedTitle
+        }
+
+        let cleanedBody = draft.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedBody.isEmpty else { return }
+        let trimmedBody = originalBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        originalBody = trimmedBody.isEmpty ? cleanedBody : "\(trimmedBody)\n\n\(cleanedBody)"
+        translatedTitle = ""
+        translatedBody = ""
+        setDisplayedLetter(title: originalTitle, body: originalBody, version: .original)
+        if selectedTranscriptOutputMode == .translate {
+            Task {
+                await prepareLetterTranslation(selectTranslatedWhenReady: true)
+            }
+        }
     }
 
     private func saveLetter(shouldSchedule: Bool) {
         focusedField = nil
+        storeActiveLetterVersion()
         let selectedMethod = deliveryMethod
         let selectedEmail = normalizedEmail(emailAddress)
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2707,7 +2956,13 @@ private struct FutureLetterComposerView: View {
             body: trimmedBody,
             deliveryDate: deliveryDate,
             deliveryMethod: selectedMethod,
-            recipientEmail: selectedMethod == .email ? selectedEmail : nil
+            recipientEmail: selectedMethod == .email ? selectedEmail : nil,
+            originalTitle: originalTitle,
+            originalBody: originalBody,
+            translatedTitle: translatedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : translatedTitle,
+            translatedBody: translatedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : translatedBody,
+            translationLanguage: translatedBody.isEmpty ? nil : selectedTranslationLanguage,
+            selectedVersion: selectedContentVersion
         )
 
         Task {
@@ -2735,6 +2990,11 @@ private struct FutureLetterComposerView: View {
                 try modelContext.save()
                 title = ""
                 bodyText = ""
+                originalTitle = ""
+                originalBody = ""
+                translatedTitle = ""
+                translatedBody = ""
+                selectedContentVersion = .original
                 deliveryDate = FutureLetterNotificationScheduler.defaultDeliveryDate()
                 message = resultMessage
                 if shouldSchedule, letter.notificationIdentifier != nil {
@@ -2748,6 +3008,227 @@ private struct FutureLetterComposerView: View {
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedTranscriptOutputMode: TranscriptOutputMode {
+        TranscriptOutputMode.value(for: transcriptOutputMode)
+    }
+
+    private var selectedTranslationLanguage: TranslationLanguage {
+        TranslationLanguage.value(for: translationTargetLanguage)
+    }
+
+    private func selectLetterVersion(_ version: TranslatedContentVersion) {
+        guard version != selectedContentVersion else { return }
+        storeActiveLetterVersion()
+        if version == .translated, translatedBody.isEmpty {
+            Task {
+                await prepareLetterTranslation(selectTranslatedWhenReady: true)
+            }
+            return
+        }
+        let content = version == .original
+            ? (originalTitle, originalBody)
+            : (translatedTitle, translatedBody)
+        setDisplayedLetter(title: content.0, body: content.1, version: version)
+    }
+
+    private func storeActiveLetterVersion() {
+        if selectedContentVersion == .original {
+            originalTitle = title
+            originalBody = bodyText
+        } else {
+            translatedTitle = title
+            translatedBody = bodyText
+        }
+    }
+
+    private func setDisplayedLetter(title: String, body: String, version: TranslatedContentVersion) {
+        suppressLetterVersionSync = true
+        selectedContentVersion = version
+        self.title = title
+        bodyText = body
+        Task { @MainActor in
+            await Task.yield()
+            suppressLetterVersionSync = false
+        }
+    }
+
+    private func syncEditedLetterVersion() {
+        guard !suppressLetterVersionSync else { return }
+        if selectedContentVersion == .original {
+            originalTitle = title
+            originalBody = bodyText
+            translatedTitle = ""
+            translatedBody = ""
+            translationError = nil
+        } else {
+            translatedTitle = title
+            translatedBody = bodyText
+        }
+    }
+
+    @MainActor
+    private func prepareLetterTranslation(selectTranslatedWhenReady: Bool) async {
+        guard translatedBody.isEmpty, !isTranslating else { return }
+        storeActiveLetterVersion()
+        guard !originalBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            translationError = "Write or record your letter before translating it."
+            return
+        }
+        isTranslating = true
+        translationError = nil
+        do {
+            let translation = try await OpenAIJournalService().translate(
+                title: originalTitle,
+                body: originalBody,
+                to: selectedTranslationLanguage
+            )
+            translatedTitle = translation.title
+            translatedBody = translation.body
+            if selectTranslatedWhenReady {
+                setDisplayedLetter(title: translatedTitle, body: translatedBody, version: .translated)
+            }
+        } catch {
+            translationError = "Translation is unavailable right now. Your original is safe."
+        }
+        isTranslating = false
+    }
+}
+
+private struct FutureLetterVersionPicker: View {
+    let selection: TranslatedContentVersion
+    let translationLanguage: TranslationLanguage
+    let isTranslating: Bool
+    let translatedVersionAvailable: Bool
+    let onSelect: (TranslatedContentVersion) -> Void
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+    @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @State private var isShowingOptions = false
+
+    var body: some View {
+        Button {
+            isShowingOptions = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "translate")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .foregroundStyle(selectedTheme.primaryColor)
+                    .frame(width: 24)
+
+                Text("Letter Version")
+                    .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if isTranslating {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text(selectedLabel)
+                        .font(selectedFontDesignPreference.font(.body))
+                        .foregroundStyle(.secondary)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isTranslating)
+        .sheet(isPresented: $isShowingOptions) {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    versionOption(
+                        version: .original,
+                        title: "Original",
+                        description: "Keep the languages exactly as you wrote and spoke."
+                    )
+
+                    Divider()
+                        .padding(.leading, 56)
+
+                    versionOption(
+                        version: .translated,
+                        title: translationLanguage.displayName,
+                        description: "Translate the complete letter using your Transcript Output setting."
+                    )
+
+                    Spacer()
+
+                    Text("Translation language is set to \(translationLanguage.displayName) in Settings.")
+                        .font(selectedFontDesignPreference.font(.caption))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 18)
+                }
+                .padding(.top, 8)
+                .background(AppThemeBackground())
+                .navigationTitle("Letter Version")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            isShowingOptions = false
+                        }
+                    }
+                }
+            }
+            .tint(selectedTheme.primaryColor)
+            .presentationDetents([.medium])
+        }
+    }
+
+    private var selectedLabel: String {
+        selection == .original ? "Original" : translationLanguage.displayName
+    }
+
+    private func versionOption(
+        version: TranslatedContentVersion,
+        title: String,
+        description: String
+    ) -> some View {
+        Button {
+            onSelect(version)
+            isShowingOptions = false
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: selection == version ? "largecircle.fill.circle" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selection == version ? selectedTheme.primaryColor : Color.secondary.opacity(0.28))
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(selectedFontDesignPreference.font(.body, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(description)
+                        .font(selectedFontDesignPreference.font(.callout))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(version == .translated && isTranslating && !translatedVersionAvailable)
+    }
+
+    private var selectedFontDesignPreference: JournalFontDesignPreference {
+        JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
     }
 }
 
@@ -3360,6 +3841,8 @@ private struct FutureLetterDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("transcriptOutputMode") private var transcriptOutputMode = TranscriptOutputMode.asSpoken.rawValue
+    @AppStorage("translationTargetLanguage") private var translationTargetLanguage = TranslationLanguage.english.rawValue
     @StateObject private var recorder = AudioRecorder()
     let letter: FutureLetter
     @State private var title = ""
@@ -3370,8 +3853,17 @@ private struct FutureLetterDetailView: View {
     @State private var verifiedEmail: String?
     @State private var isRecording = false
     @State private var isProcessingRecording = false
+    @State private var processingLimitReason: RecordingDurationLimitReason?
     @State private var compositionMode = FutureLetterCompositionMode.type
     @State private var message: String?
+    @State private var originalTitle = ""
+    @State private var originalBody = ""
+    @State private var translatedTitle = ""
+    @State private var translatedBody = ""
+    @State private var selectedContentVersion = TranslatedContentVersion.original
+    @State private var isTranslating = false
+    @State private var translationError: String?
+    @State private var suppressLetterVersionSync = false
     @FocusState private var focusedField: FutureLetterFocusedField?
 
     var body: some View {
@@ -3391,6 +3883,12 @@ private struct FutureLetterDetailView: View {
         }
         .navigationTitle("Draft Letter")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: title) { _, _ in
+            syncEditedLetterVersion()
+        }
+        .onChange(of: bodyText) { _, _ in
+            syncEditedLetterVersion()
+        }
         .onAppear {
             loadLetter()
         }
@@ -3461,8 +3959,16 @@ private struct FutureLetterDetailView: View {
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if isProcessingRecording {
-                ProgressView("Transcribing your letter")
-                    .font(selectedFontDesignPreference.font(.callout))
+                if let processingLimitReason {
+                    RecordingLimitProcessingBanner(
+                        reason: processingLimitReason,
+                        contentName: "letter",
+                        fontDesign: selectedFontDesignPreference
+                    )
+                } else {
+                    ProgressView("Preparing your letter")
+                        .font(selectedFontDesignPreference.font(.callout))
+                }
             }
 
             if let message {
@@ -3541,6 +4047,24 @@ private struct FutureLetterDetailView: View {
                     .imageScale(.small)
             }
 
+            if selectedTranscriptOutputMode == .translate || !translatedBody.isEmpty {
+                FutureLetterVersionPicker(
+                    selection: selectedContentVersion,
+                    translationLanguage: selectedTranslationLanguage,
+                    isTranslating: isTranslating,
+                    translatedVersionAvailable: !translatedBody.isEmpty
+                ) { version in
+                    selectLetterVersion(version)
+                }
+
+                if let translationError {
+                    Text(translationError)
+                        .font(selectedFontDesignPreference.font(.caption))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             actionButtons
         }
         .padding(18)
@@ -3595,8 +4119,23 @@ private struct FutureLetterDetailView: View {
     }
 
     private func loadLetter() {
-        title = letter.title
-        bodyText = letter.body
+        let savedVersion = TranslatedContentVersion(rawValue: letter.selectedVersionRawValue ?? "") ?? .original
+        originalTitle = letter.originalTitle ?? (savedVersion == .original ? letter.title : "")
+        originalBody = letter.originalBody ?? (savedVersion == .original ? letter.body : "")
+        let savedLanguage = TranslationLanguage.value(for: letter.translationLanguageRawValue)
+        if letter.translationLanguageRawValue == nil || savedLanguage == selectedTranslationLanguage {
+            translatedTitle = letter.translatedTitle ?? (savedVersion == .translated ? letter.title : "")
+            translatedBody = letter.translatedBody ?? (savedVersion == .translated ? letter.body : "")
+            selectedContentVersion = savedVersion == .translated && !translatedBody.isEmpty ? .translated : .original
+        } else {
+            translatedTitle = ""
+            translatedBody = ""
+            selectedContentVersion = .original
+        }
+        let displayed = selectedContentVersion == .original
+            ? (originalTitle, originalBody)
+            : (translatedTitle, translatedBody)
+        setDisplayedLetter(title: displayed.0, body: displayed.1, version: selectedContentVersion)
         deliveryDate = max(letter.deliveryDate, Date())
         deliveryMethod = letter.deliveryMethod
         emailAddress = letter.recipientEmail ?? ""
@@ -3634,7 +4173,16 @@ private struct FutureLetterDetailView: View {
 
     private func startRecording() {
         message = nil
+        processingLimitReason = nil
         focusedField = nil
+        recorder.onRecordingDurationLimitReached = { reason in
+            guard isRecording else { return }
+            stopRecording(limitReason: reason)
+        }
+        recorder.onRecordingInterrupted = { reason in
+            guard isRecording else { return }
+            stopRecording(interruptionReason: reason)
+        }
         Task {
             do {
                 try await recorder.start()
@@ -3645,33 +4193,58 @@ private struct FutureLetterDetailView: View {
         }
     }
 
-    private func stopRecording() {
+    private func stopRecording(
+        limitReason: RecordingDurationLimitReason? = nil,
+        interruptionReason: RecordingInterruptionReason? = nil
+    ) {
+        processingLimitReason = limitReason
+        message = interruptionReason?.notice
         isProcessingRecording = true
         isRecording = false
+        let backgroundTask = RecordingProcessingBackgroundTask(name: "Finish letter transcription")
         Task {
+            defer { backgroundTask.finish() }
             do {
                 let url = try recorder.stop()
                 defer { recorder.deleteRecording(at: url) }
-                let transcript = try await OpenAIJournalService().previewTranscript(from: url)
-                appendTranscript(transcript)
-                message = "Recording added to your letter."
+                let draft = try await OpenAIJournalService().makeDraft(from: url)
+                applyRecordedDraft(draft)
+                message = [interruptionReason?.notice, "Your recording was cleaned and added to the letter."]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
             } catch {
                 message = error.localizedDescription
             }
             isProcessingRecording = false
+            processingLimitReason = nil
             try? await recorder.prepare()
         }
     }
 
-    private func appendTranscript(_ transcript: String) {
-        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTranscript.isEmpty else { return }
-        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        bodyText = trimmedBody.isEmpty ? trimmedTranscript : "\(trimmedBody)\n\n\(trimmedTranscript)"
+    private func applyRecordedDraft(_ draft: JournalDraft) {
+        storeActiveLetterVersion()
+        let generatedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            originalTitle = generatedTitle
+        }
+
+        let cleanedBody = draft.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedBody.isEmpty else { return }
+        let trimmedBody = originalBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        originalBody = trimmedBody.isEmpty ? cleanedBody : "\(trimmedBody)\n\n\(cleanedBody)"
+        translatedTitle = ""
+        translatedBody = ""
+        setDisplayedLetter(title: originalTitle, body: originalBody, version: .original)
+        if selectedTranscriptOutputMode == .translate {
+            Task {
+                await prepareLetterTranslation(selectTranslatedWhenReady: true)
+            }
+        }
     }
 
     private func saveChanges(shouldSchedule: Bool) {
         focusedField = nil
+        storeActiveLetterVersion()
         let selectedMethod = deliveryMethod
         let selectedEmail = normalizedEmail(emailAddress)
         if let notificationIdentifier = letter.notificationIdentifier {
@@ -3684,6 +4257,12 @@ private struct FutureLetterDetailView: View {
         letter.deliveryDate = deliveryDate
         letter.deliveryMethod = selectedMethod
         letter.recipientEmail = selectedMethod == .email ? selectedEmail : nil
+        letter.originalTitle = originalTitle
+        letter.originalBody = originalBody
+        letter.translatedTitle = translatedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : translatedTitle
+        letter.translatedBody = translatedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : translatedBody
+        letter.translationLanguageRawValue = translatedBody.isEmpty ? nil : selectedTranslationLanguage.rawValue
+        letter.selectedVersionRawValue = selectedContentVersion.rawValue
         letter.remoteDeliveryStatusRawValue = nil
         letter.remoteDeliveredAt = nil
         letter.updatedAt = Date()
@@ -3722,6 +4301,91 @@ private struct FutureLetterDetailView: View {
 
     private var selectedFontDesignPreference: JournalFontDesignPreference {
         JournalFontDesignPreference.value(for: journalFontDesignPreference)
+    }
+
+    private var selectedTranscriptOutputMode: TranscriptOutputMode {
+        TranscriptOutputMode.value(for: transcriptOutputMode)
+    }
+
+    private var selectedTranslationLanguage: TranslationLanguage {
+        TranslationLanguage.value(for: translationTargetLanguage)
+    }
+
+    private func selectLetterVersion(_ version: TranslatedContentVersion) {
+        guard version != selectedContentVersion else { return }
+        storeActiveLetterVersion()
+        if version == .translated, translatedBody.isEmpty {
+            Task {
+                await prepareLetterTranslation(selectTranslatedWhenReady: true)
+            }
+            return
+        }
+        let content = version == .original
+            ? (originalTitle, originalBody)
+            : (translatedTitle, translatedBody)
+        setDisplayedLetter(title: content.0, body: content.1, version: version)
+    }
+
+    private func storeActiveLetterVersion() {
+        if selectedContentVersion == .original {
+            originalTitle = title
+            originalBody = bodyText
+        } else {
+            translatedTitle = title
+            translatedBody = bodyText
+        }
+    }
+
+    private func setDisplayedLetter(title: String, body: String, version: TranslatedContentVersion) {
+        suppressLetterVersionSync = true
+        selectedContentVersion = version
+        self.title = title
+        bodyText = body
+        Task { @MainActor in
+            await Task.yield()
+            suppressLetterVersionSync = false
+        }
+    }
+
+    private func syncEditedLetterVersion() {
+        guard !suppressLetterVersionSync else { return }
+        if selectedContentVersion == .original {
+            originalTitle = title
+            originalBody = bodyText
+            translatedTitle = ""
+            translatedBody = ""
+            translationError = nil
+        } else {
+            translatedTitle = title
+            translatedBody = bodyText
+        }
+    }
+
+    @MainActor
+    private func prepareLetterTranslation(selectTranslatedWhenReady: Bool) async {
+        guard translatedBody.isEmpty, !isTranslating else { return }
+        storeActiveLetterVersion()
+        guard !originalBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            translationError = "Write or record your letter before translating it."
+            return
+        }
+        isTranslating = true
+        translationError = nil
+        do {
+            let translation = try await OpenAIJournalService().translate(
+                title: originalTitle,
+                body: originalBody,
+                to: selectedTranslationLanguage
+            )
+            translatedTitle = translation.title
+            translatedBody = translation.body
+            if selectTranslatedWhenReady {
+                setDisplayedLetter(title: translatedTitle, body: translatedBody, version: .translated)
+            }
+        } catch {
+            translationError = "Translation is unavailable right now. Your original is safe."
+        }
+        isTranslating = false
     }
 }
 
@@ -4075,7 +4739,10 @@ private struct ThemeCloudOrbitLayout: Layout {
         subviews[0].place(at: mainCenter, anchor: .center, proposal: ProposedViewSize(mainSize))
 
         var occupied = [rect(centeredAt: mainCenter, size: mainCollisionSize)]
-        let anchors = distributedAnchors(in: bounds)
+        let anchors = distributedAnchors(
+            in: bounds,
+            count: max(1, subviews.count - 1)
+        )
 
         for index in subviews.indices.dropFirst() {
             let size = subviews[index].sizeThatFits(.unspecified)
@@ -4097,8 +4764,7 @@ private struct ThemeCloudOrbitLayout: Layout {
         }
     }
 
-    private func distributedAnchors(in bounds: CGRect) -> [CGPoint] {
-        let count = 9
+    private func distributedAnchors(in bounds: CGRect, count: Int) -> [CGPoint] {
         let phase = randomUnit(for: 0) * (2 * CGFloat.pi / CGFloat(count))
         return (0..<count).map { index in
             let angleJitter = (randomUnit(for: index + 10) - 0.5) * 0.18

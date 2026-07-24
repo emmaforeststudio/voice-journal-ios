@@ -409,8 +409,8 @@ struct JournalRow: View {
                     Text(entry.title)
                         .font(selectedFontDesignPreference.font(.headline))
                         .foregroundStyle(.primary)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         .layoutPriority(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

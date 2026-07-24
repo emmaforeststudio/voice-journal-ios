@@ -11,6 +11,7 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var recordingDuration: TimeInterval = 0
     @Published private(set) var liveTranscript = ""
     @Published private(set) var livePreviewNotice: String?
+    @Published private(set) var processingLimitReason: RecordingDurationLimitReason?
 
     let recorder = AudioRecorder()
     private let openAIJournalService = OpenAIJournalService()
@@ -20,7 +21,7 @@ final class RecorderViewModel: ObservableObject {
     private var previewTimer: AnyCancellable?
     private var recorderObservation: AnyCancellable?
     private var isLoadingPreview = false
-    private var isLivePreviewEnabled = true
+    private var isLivePreviewEnabled = false
     private let firstPreviewChunkDuration: TimeInterval = 5
     private let previewChunkDuration: TimeInterval = 10
     private let previewChunkOverlap: TimeInterval = 1
@@ -34,6 +35,14 @@ final class RecorderViewModel: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        recorder.onRecordingDurationLimitReached = { [weak self] reason in
+            guard self?.isRecording == true else { return }
+            self?.stopRecording(limitReason: reason)
+        }
+        recorder.onRecordingInterrupted = { [weak self] reason in
+            guard self?.isRecording == true else { return }
+            self?.stopRecording(interruptionReason: reason)
+        }
     }
 
     var isRecording: Bool {
@@ -70,6 +79,7 @@ final class RecorderViewModel: ObservableObject {
 
     func startRecording() {
         errorMessage = nil
+        processingLimitReason = nil
         liveTranscript = ""
         livePreviewNotice = nil
         resetPreviewSession()
@@ -90,14 +100,20 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
-    func stopRecording() {
-        errorMessage = nil
+    func stopRecording(
+        limitReason: RecordingDurationLimitReason? = nil,
+        interruptionReason: RecordingInterruptionReason? = nil
+    ) {
+        errorMessage = interruptionReason?.notice
+        processingLimitReason = limitReason
         isProcessing = true
         stopRecordingTimer()
         stopPreviewTimer()
         let latestLiveTranscript = liveTranscript
+        let backgroundTask = RecordingProcessingBackgroundTask(name: "Finish journal transcription")
 
         Task {
+            defer { backgroundTask.finish() }
             do {
                 let url = try recorder.stop()
                 defer { recorder.deleteRecording(at: url) }
@@ -117,6 +133,18 @@ final class RecorderViewModel: ObservableObject {
                         draft = fallbackDraft
                     }
                 }
+                if let limitReason, var completedDraft = draft {
+                    completedDraft.notice = [completedDraft.notice, limitReason.notice]
+                        .compactMap { $0 }
+                        .joined(separator: " ")
+                    draft = completedDraft
+                }
+                if let interruptionReason, var completedDraft = draft {
+                    completedDraft.notice = [completedDraft.notice, interruptionReason.notice]
+                        .compactMap { $0 }
+                        .joined(separator: " ")
+                    draft = completedDraft
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 if error as? RecordingError == .noAudibleAudio {
@@ -135,6 +163,7 @@ final class RecorderViewModel: ObservableObject {
                 }
             }
             isProcessing = false
+            processingLimitReason = nil
             liveTranscript = ""
             livePreviewNotice = nil
             prepareForRecording()
@@ -145,6 +174,7 @@ final class RecorderViewModel: ObservableObject {
     func cancelRecording() {
         errorMessage = nil
         isProcessing = false
+        processingLimitReason = nil
         stopRecordingTimer()
         stopPreviewTimer()
         if isRecording {
@@ -195,7 +225,8 @@ final class RecorderViewModel: ObservableObject {
         recordingTimer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.recordingDuration += 1
+                guard let self else { return }
+                self.recordingDuration = self.recorder.currentRecordingTime
             }
     }
 

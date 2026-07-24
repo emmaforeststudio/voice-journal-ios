@@ -11,6 +11,12 @@ final class JournalEntry {
     var languageRawValue: String
     var createdAt: Date
     var updatedAt: Date
+    var originalTitle: String?
+    var originalBody: String?
+    var translatedTitle: String?
+    var translatedBody: String?
+    var translationLanguageRawValue: String?
+    var displayedVersionRawValue: String?
 
     var language: JournalLanguage {
         get { JournalLanguage(rawValue: languageRawValue) ?? .english }
@@ -24,6 +30,12 @@ final class JournalEntry {
         journalDate: Date,
         emoji: String,
         language: JournalLanguage,
+        originalTitle: String? = nil,
+        originalBody: String? = nil,
+        translatedTitle: String? = nil,
+        translatedBody: String? = nil,
+        translationLanguage: TranslationLanguage? = nil,
+        displayedVersion: TranslatedContentVersion = .original,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -33,6 +45,12 @@ final class JournalEntry {
         self.journalDate = journalDate
         self.emoji = emoji
         self.languageRawValue = language.rawValue
+        self.originalTitle = originalTitle
+        self.originalBody = originalBody
+        self.translatedTitle = translatedTitle
+        self.translatedBody = translatedBody
+        self.translationLanguageRawValue = translationLanguage?.rawValue
+        self.displayedVersionRawValue = displayedVersion.rawValue
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -51,6 +69,12 @@ final class FutureLetter {
     var remoteDeliveredAt: Date?
     var createdAt: Date
     var updatedAt: Date
+    var originalTitle: String?
+    var originalBody: String?
+    var translatedTitle: String?
+    var translatedBody: String?
+    var translationLanguageRawValue: String?
+    var selectedVersionRawValue: String?
 
     var deliveryMethod: FutureLetterDeliveryMethod {
         get { FutureLetterDeliveryMethod(rawValue: deliveryMethodRawValue) ?? .inAppNotification }
@@ -67,6 +91,12 @@ final class FutureLetter {
         recipientEmail: String? = nil,
         remoteDeliveryStatus: FutureLetterEmailStatus? = nil,
         remoteDeliveredAt: Date? = nil,
+        originalTitle: String? = nil,
+        originalBody: String? = nil,
+        translatedTitle: String? = nil,
+        translatedBody: String? = nil,
+        translationLanguage: TranslationLanguage? = nil,
+        selectedVersion: TranslatedContentVersion = .original,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -79,8 +109,104 @@ final class FutureLetter {
         self.recipientEmail = recipientEmail
         self.remoteDeliveryStatusRawValue = remoteDeliveryStatus?.rawValue
         self.remoteDeliveredAt = remoteDeliveredAt
+        self.originalTitle = originalTitle
+        self.originalBody = originalBody
+        self.translatedTitle = translatedTitle
+        self.translatedBody = translatedBody
+        self.translationLanguageRawValue = translationLanguage?.rawValue
+        self.selectedVersionRawValue = selectedVersion.rawValue
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+enum TranscriptOutputMode: String, CaseIterable, Identifiable {
+    case asSpoken
+    case translate
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .asSpoken: "Keep As Spoken"
+        case .translate: "Translate Multilingual Recordings"
+        }
+    }
+
+    static func value(for rawValue: String) -> TranscriptOutputMode {
+        TranscriptOutputMode(rawValue: rawValue) ?? .asSpoken
+    }
+}
+
+enum TranslatedContentVersion: String, CaseIterable, Identifiable {
+    case original
+    case translated
+
+    var id: String { rawValue }
+}
+
+enum TranslationLanguage: String, CaseIterable, Identifiable, Codable {
+    case english
+    case chineseSimplified
+    case chineseTraditional
+    case cantonese
+    case korean
+    case japanese
+    case spanish
+    case french
+    case german
+    case italian
+    case portuguese
+    case arabic
+    case hindi
+    case bengali
+    case russian
+    case ukrainian
+    case polish
+    case dutch
+    case turkish
+    case vietnamese
+    case thai
+    case indonesian
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .english: "English"
+        case .chineseSimplified: "Chinese (Simplified)"
+        case .chineseTraditional: "Chinese (Traditional)"
+        case .cantonese: "Cantonese"
+        case .korean: "Korean"
+        case .japanese: "Japanese"
+        case .spanish: "Spanish"
+        case .french: "French"
+        case .german: "German"
+        case .italian: "Italian"
+        case .portuguese: "Portuguese"
+        case .arabic: "Arabic"
+        case .hindi: "Hindi"
+        case .bengali: "Bengali"
+        case .russian: "Russian"
+        case .ukrainian: "Ukrainian"
+        case .polish: "Polish"
+        case .dutch: "Dutch"
+        case .turkish: "Turkish"
+        case .vietnamese: "Vietnamese"
+        case .thai: "Thai"
+        case .indonesian: "Indonesian"
+        }
+    }
+
+    var compactDisplayName: String {
+        displayName
+            .components(separatedBy: " (")
+            .first ?? displayName
+    }
+
+    static func value(for rawValue: String?) -> TranslationLanguage {
+        guard let rawValue else { return .english }
+        return TranslationLanguage(rawValue: rawValue) ?? .english
     }
 }
 

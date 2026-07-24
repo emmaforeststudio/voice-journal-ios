@@ -1,48 +1,47 @@
-# Waiting To Pay Checklist
+# Before Apple Developer Enrollment
 
-Use this while delaying Apple Developer Program payment.
+Last reviewed: July 17, 2026
 
 ## Already Prepared
 
 - App name: `Flara Day`
-- Bundle ID in Xcode: `com.emmaforeststudio.FlaraDay`
-- GitHub repo: `https://github.com/emmaforeststudio/voice-journal-ios`
+- Bundle ID: `com.emmaforeststudio.FlaraDay`
+- Version / build: `1.0` / `5`
+- GitHub: `https://github.com/emmaforeststudio/voice-journal-ios`
 - Backend: `https://flara-day-backend.emmaforeststudio.workers.dev`
-- Support URL: `https://flara-day-backend.emmaforeststudio.workers.dev/support`
-- Privacy Policy URL: `https://flara-day-backend.emmaforeststudio.workers.dev/privacy`
+- Support and privacy URLs: deployed
 - Support email: `emmaforeststudio@gmail.com`
-- Privacy effective date: `July 13, 2026`
+- Privacy effective date: July 16, 2026
+- Resend, D1, Cron, email verification, and scheduled delivery: configured
+- Enrollment type: Individual
+- Legal / seller name: `Yan Shen`
 
-## Keep Testing Before Paying
+## Useful Work Before Paying
 
-- Record short English and Chinese entries on iPhone.
-- Test live preview on Wi-Fi.
-- Test live preview on cellular.
-- Test final journal generation.
-- Test export/import.
-- Test Face ID/password lock.
-- Check Settings > Connection.
-- Watch Cloudflare usage for request failures or quota concerns.
-- After Resend setup, verify and schedule a future-letter email, then test delivery and cancellation.
+- Run the real-device regression list in `RELEASE_READINESS.md`.
+- Test mixed-language speech, including short Chinese and Korean phrases inside
+  English sentences.
+- Test Wi-Fi, cellular, airplane mode, and interrupted requests.
+- Test live preview off and on.
+- Test in-app and email future letters, cancellation, deletion, and deep linking.
+- Test export and only the import formats currently supported.
+- Test app lock, appearance settings, dark mode, VoiceOver, and Dynamic Type.
+- Watch OpenAI, Cloudflare, and Resend usage.
+- Confirm the Apple Account's legal name matches `Yan Shen` exactly as shown on
+  the identity document used for enrollment.
 
-## Do Not Add Before First TestFlight Unless Needed
+## Keep Out Of The Selected-Friends Beta
 
-- User accounts
-- Subscriptions or the one-week no-commitment voice trial
-- Third-party analytics
-- Crash reporting SDKs
-- Support request forms
-- Cloud sync
+- subscriptions and StoreKit paywalls
+- user accounts and cloud journal sync
+- third-party analytics or crash reporting
+- direct Word and native Apple Notes import claims; selectable-text PDFs are
+  supported
 
-These can be added later, but each one makes App Store privacy answers, testing, and review more complex.
+## What Payment Unlocks
 
-## After Paying Apple Developer
+Apple Developer Program membership is required to create the distribution App ID,
+create the App Store Connect app record, sign an App Store archive, upload it,
+and distribute it through TestFlight.
 
-1. Register bundle ID: `com.emmaforeststudio.FlaraDay`.
-2. Create App Store Connect app record for `Flara Day`.
-3. Confirm Xcode signing with the paid Apple Developer team.
-4. Run the app on your iPhone from Xcode.
-5. Archive and upload build `1`.
-6. Add yourself to TestFlight first.
-7. Invite a small Friends Beta group.
-8. Capture final screenshots from the stable build.
+After activation, follow `TESTFLIGHT_UPLOAD_CHECKLIST.md`.

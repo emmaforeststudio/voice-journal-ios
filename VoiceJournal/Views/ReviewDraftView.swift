@@ -5,6 +5,8 @@ struct ReviewDraftView: View {
     @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
     @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("transcriptOutputMode") private var transcriptOutputMode = TranscriptOutputMode.asSpoken.rawValue
+    @AppStorage("translationTargetLanguage") private var translationTargetLanguage = TranslationLanguage.english.rawValue
     @FocusState private var focusedField: Field?
     @State private var title: String
     @State private var journalBody: String
@@ -16,6 +18,14 @@ struct ReviewDraftView: View {
     @State private var isShowingDeleteConfirmation = false
     @State private var isShowingDatePicker = false
     @State private var isShowingContinuationRecorder = false
+    @State private var originalTitle: String
+    @State private var originalBody: String
+    @State private var translatedTitle = ""
+    @State private var translatedBody = ""
+    @State private var selectedContentVersion = TranslatedContentVersion.original
+    @State private var isTranslating = false
+    @State private var translationError: String?
+    @State private var suppressAutomaticTitleUpdate = false
     private let language: JournalLanguage
     private let notice: String?
     private let onSave: (JournalEntry) -> Void
@@ -32,6 +42,8 @@ struct ReviewDraftView: View {
     ) {
         _title = State(initialValue: draft.title)
         _journalBody = State(initialValue: draft.body)
+        _originalTitle = State(initialValue: draft.title)
+        _originalBody = State(initialValue: draft.body)
         _journalDate = State(initialValue: draft.journalDate)
         _emoji = State(initialValue: draft.emoji)
         language = draft.language
@@ -58,6 +70,9 @@ struct ReviewDraftView: View {
 
                         titleView
                         metadataRow
+                        if shouldShowVersionSwitcher {
+                            versionSwitcher
+                        }
                         Divider()
                         journalBodyView
                     }
@@ -69,11 +84,30 @@ struct ReviewDraftView: View {
                 .scrollDismissesKeyboard(.interactively)
             }
             .background(AppThemeBackground())
-            .onChange(of: journalBody) { _, newValue in
-                title = processor.makeTitle(from: newValue, language: language)
-                if !didManuallyChooseEmoji {
-                    emoji = processor.moodEmoji(from: newValue, language: language)
+            .onChange(of: title) { _, newValue in
+                guard !suppressAutomaticTitleUpdate else { return }
+                if selectedContentVersion == .original {
+                    originalTitle = newValue
+                    invalidateTranslation()
+                } else {
+                    translatedTitle = newValue
                 }
+            }
+            .onChange(of: journalBody) { _, newValue in
+                guard !suppressAutomaticTitleUpdate else { return }
+                if selectedContentVersion == .original {
+                    originalBody = newValue
+                    invalidateTranslation()
+                    title = processor.makeTitle(from: newValue, language: language)
+                    if !didManuallyChooseEmoji {
+                        emoji = processor.moodEmoji(from: newValue, language: language)
+                    }
+                } else {
+                    translatedBody = newValue
+                }
+            }
+            .task {
+                await prepareTranslationIfNeeded(selectTranslatedWhenReady: true)
             }
             .safeAreaInset(edge: .bottom) {
                 bottomActionBar
@@ -210,18 +244,19 @@ struct ReviewDraftView: View {
     @ViewBuilder
     private var titleView: some View {
         if isEditing {
-            TextField("Title", text: $title, axis: .vertical)
+            TextField("Title", text: $title)
                 .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .textInputAutocapitalization(.sentences)
                 .foregroundStyle(title == "Untitled Journal" ? .secondary : .primary)
-                .lineLimit(1...4)
+                .lineLimit(1)
                 .focused($focusedField, equals: .title)
         } else {
             Text(title.isEmpty ? "Untitled Journal" : title)
                 .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .foregroundStyle(title == "Untitled Journal" ? .secondary : .primary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -244,6 +279,27 @@ struct ReviewDraftView: View {
                 didManuallyChooseEmoji = true
             }
             .frame(maxWidth: 210, alignment: .trailing)
+        }
+    }
+
+    private var versionSwitcher: some View {
+        VStack(spacing: 8) {
+            TranslatedContentSwitcher(
+                selection: selectedContentVersion,
+                translatedLabel: selectedTranslationLanguage.compactDisplayName,
+                isTranslating: isTranslating,
+                translatedVersionAvailable: !translatedBody.isEmpty
+            ) { version in
+                selectContentVersion(version)
+            }
+
+            if let translationError {
+                Text(translationError)
+                    .font(selectedFontDesignPreference.font(.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -329,6 +385,18 @@ struct ReviewDraftView: View {
         AppColorTheme.value(for: themeColorPreference)
     }
 
+    private var selectedTranscriptOutputMode: TranscriptOutputMode {
+        TranscriptOutputMode.value(for: transcriptOutputMode)
+    }
+
+    private var selectedTranslationLanguage: TranslationLanguage {
+        TranslationLanguage.value(for: translationTargetLanguage)
+    }
+
+    private var shouldShowVersionSwitcher: Bool {
+        selectedTranscriptOutputMode == .translate || !translatedBody.isEmpty
+    }
+
     private func modeSelectionBackground(_ isSelected: Bool) -> Color {
         guard isSelected else { return .clear }
         return selectedTheme.colorScheme == .dark ? selectedTheme.primaryColor : Color.white.opacity(0.90)
@@ -352,23 +420,170 @@ struct ReviewDraftView: View {
     }
 
     private func appendDraft(_ draft: JournalDraft) {
+        storeActiveVersion()
         let appendedText = draft.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !appendedText.isEmpty else { return }
-        let existingBody = journalBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        journalBody = existingBody.isEmpty ? appendedText : "\(existingBody)\n\n\(appendedText)"
+        let existingBody = originalBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        originalBody = existingBody.isEmpty ? appendedText : "\(existingBody)\n\n\(appendedText)"
+        originalTitle = processor.makeTitle(from: originalBody, language: language)
+        translatedTitle = ""
+        translatedBody = ""
+        setDisplayedContent(title: originalTitle, body: originalBody, version: .original)
         isRecordingMode = false
+        Task {
+            await prepareTranslationIfNeeded(selectTranslatedWhenReady: true)
+        }
     }
 
     private func saveDraft() {
+        storeActiveVersion()
         let entry = JournalEntry(
             title: title,
             body: journalBody.trimmingCharacters(in: .whitespacesAndNewlines),
             journalDate: journalDate,
             emoji: emoji,
-            language: language
+            language: language,
+            originalTitle: originalTitle,
+            originalBody: originalBody,
+            translatedTitle: translatedTitle.nilIfEmpty,
+            translatedBody: translatedBody.nilIfEmpty,
+            translationLanguage: translatedBody.isEmpty ? nil : selectedTranslationLanguage,
+            displayedVersion: selectedContentVersion
         )
         onSave(entry)
         dismiss()
+    }
+
+    private func selectContentVersion(_ version: TranslatedContentVersion) {
+        guard version != selectedContentVersion else { return }
+        storeActiveVersion()
+        if version == .translated, translatedBody.isEmpty {
+            Task {
+                await prepareTranslationIfNeeded(selectTranslatedWhenReady: true)
+            }
+            return
+        }
+        let content = version == .original
+            ? (originalTitle, originalBody)
+            : (translatedTitle, translatedBody)
+        setDisplayedContent(title: content.0, body: content.1, version: version)
+    }
+
+    private func storeActiveVersion() {
+        if selectedContentVersion == .original {
+            originalTitle = title
+            originalBody = journalBody
+        } else {
+            translatedTitle = title
+            translatedBody = journalBody
+        }
+    }
+
+    private func invalidateTranslation() {
+        translatedTitle = ""
+        translatedBody = ""
+        translationError = nil
+    }
+
+    private func setDisplayedContent(title: String, body: String, version: TranslatedContentVersion) {
+        suppressAutomaticTitleUpdate = true
+        selectedContentVersion = version
+        self.title = title
+        journalBody = body
+        Task { @MainActor in
+            await Task.yield()
+            suppressAutomaticTitleUpdate = false
+        }
+    }
+
+    @MainActor
+    private func prepareTranslationIfNeeded(selectTranslatedWhenReady: Bool) async {
+        guard selectedTranscriptOutputMode == .translate, translatedBody.isEmpty, !isTranslating else { return }
+        storeActiveVersion()
+        guard !originalBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        isTranslating = true
+        translationError = nil
+        do {
+            let translation = try await OpenAIJournalService().translate(
+                title: originalTitle,
+                body: originalBody,
+                to: selectedTranslationLanguage
+            )
+            translatedTitle = translation.title
+            translatedBody = translation.body
+            if selectTranslatedWhenReady {
+                setDisplayedContent(title: translatedTitle, body: translatedBody, version: .translated)
+            }
+        } catch {
+            translationError = "Translation is unavailable right now. Your original is safe."
+        }
+        isTranslating = false
+    }
+}
+
+struct TranslatedContentSwitcher: View {
+    let selection: TranslatedContentVersion
+    let translatedLabel: String
+    let isTranslating: Bool
+    let translatedVersionAvailable: Bool
+    let onSelect: (TranslatedContentVersion) -> Void
+    @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
+
+    var body: some View {
+        HStack(spacing: 0) {
+            option(title: "Original", version: .original, isEnabled: true)
+            option(
+                title: translatedLabel,
+                version: .translated,
+                isEnabled: translatedVersionAvailable || !isTranslating
+            )
+        }
+        .padding(2)
+        .frame(maxWidth: 270)
+        .background(selectedTheme.primaryColor.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 11))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func option(title: String, version: TranslatedContentVersion, isEnabled: Bool) -> some View {
+        Button {
+            onSelect(version)
+        } label: {
+            Group {
+                if version == .translated && isTranslating && !translatedVersionAvailable {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text(title)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+            }
+            .font(.callout.weight(.medium))
+            .foregroundStyle(selection == version ? Color.primary : Color.secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .background {
+                if selection == version {
+                    AppThemeCardBackground()
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityAddTraits(selection == version ? .isSelected : [])
+    }
+
+    private var selectedTheme: AppColorTheme {
+        AppColorTheme.value(for: themeColorPreference)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -404,7 +619,7 @@ struct EmojiSelector: View {
 
 struct ContinuationRecordingView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("showLivePreview") private var showLivePreview = true
+    @AppStorage("showLivePreview") private var showLivePreview = false
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @StateObject private var viewModel = RecorderViewModel()
     @State private var didStartRecording = false
@@ -442,9 +657,18 @@ struct ContinuationRecordingView: View {
                         }
 
                         if viewModel.isProcessing {
-                            ProgressView("Adding to your journal")
-                                .font(selectedContinuationFontDesignPreference.font(.body))
+                            if let limitReason = viewModel.processingLimitReason {
+                                RecordingLimitProcessingBanner(
+                                    reason: limitReason,
+                                    contentName: "journal",
+                                    fontDesign: selectedContinuationFontDesignPreference
+                                )
                                 .padding(.top, 22)
+                            } else {
+                                ProgressView("Adding to your journal")
+                                    .font(selectedContinuationFontDesignPreference.font(.body))
+                                    .padding(.top, 22)
+                            }
                         }
                     }
                     .padding(.bottom, 220)

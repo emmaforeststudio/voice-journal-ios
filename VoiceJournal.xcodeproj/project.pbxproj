@@ -229,6 +229,11 @@
 				TargetAttributes = {
 					100000000000000000000401 = {
 						CreatedOnToolsVersion = 26.0;
+						SystemCapabilities = {
+							com.apple.BackgroundModes = {
+								enabled = 1;
+							};
+						};
 					};
 					100000000000000000000402 = {
 						CreatedOnToolsVersion = 26.0;
@@ -455,7 +460,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				VOICE_JOURNAL_BACKEND_URL = "http://Emmas-MacBook-Pro.local:8787";
+				VOICE_JOURNAL_BACKEND_URL = "https://flara-day-backend.emmaforeststudio.workers.dev";
 				VOICE_JOURNAL_EMAIL_BACKEND_URL = "https://flara-day-backend.emmaforeststudio.workers.dev";
 			};
 			name = Debug;

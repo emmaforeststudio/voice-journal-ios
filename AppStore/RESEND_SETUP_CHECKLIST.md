@@ -1,35 +1,53 @@
-# Resend Setup Checklist
+# Future-Letter Email Operations
 
-The Cloudflare Worker, D1 database, Cron trigger, encryption key, and device-authentication secret are already deployed. Complete this checklist to turn on real email delivery.
+Last reviewed: July 16, 2026
 
-## Emma's steps
+The original Resend setup is complete. This document is now an operating and
+release checklist rather than an installation checklist.
 
-1. Create a Resend account with `emmaforeststudio@gmail.com`.
-2. Choose a studio domain to use for Flara Day email. Resend requires a domain you own; it cannot verify a shared Gmail address.
-3. In Resend, add the domain. A sending subdomain such as `letters.yourdomain.com` is preferable because it isolates email reputation.
-4. Add the SPF and DKIM records shown by Resend to the domain's DNS settings.
-5. Wait until Resend shows the domain as **Verified**.
-6. Create a Resend API key with sending permission.
-7. Decide the sender address, for example `Flara Day <letters@letters.yourdomain.com>`.
+## Current Configuration
 
-Do not paste the API key into chat, a source file, GitHub, or a screenshot.
+- Resend account: studio account
+- Verified sending domain: `letters.emmaforeststudio.com`
+- Cloudflare Worker: `flara-day-backend`
+- D1 database: configured
+- Cron delivery: configured
+- Pending letter encryption: configured
+- Recipient verification: configured
+- `/v1/email-health`: database and provider configured
+- Real scheduled email delivery: tested
 
-## Codex steps after verification
+Never place Resend, OpenAI, encryption, or device-authentication secrets in the
+repository, app binary, screenshots, support email, or chat.
 
-1. Open an interactive terminal prompt for `wrangler secret put RESEND_API_KEY` so Emma can enter the key privately.
-2. Store the sender with `wrangler secret put RESEND_FROM_EMAIL`.
-3. Redeploy `flara-day-backend`.
-4. Confirm `/v1/email-health` reports `providerConfigured: true`.
-5. Install the new app build on the iPhone.
-6. Verify a test recipient address.
-7. Schedule one letter several minutes ahead.
-8. Confirm it moves from Scheduled Letters to Delivered Letters and that its full content has been scrubbed from D1 after sending.
-9. Test cancellation by deleting a second scheduled letter before its delivery time.
+## Before Each Beta Build
 
-## Free-plan monitoring
+- [ ] Open `/v1/email-health` and confirm both configuration values are true.
+- [ ] Request a verification code to a test address.
+- [ ] Verify the address in the app.
+- [ ] Schedule one email several minutes in the future.
+- [ ] Confirm the email includes title, body, and the date the letter was written.
+- [ ] Confirm the app moves the letter from Scheduled to Delivered.
+- [ ] Delete a second pending letter and confirm it is not delivered.
 
-- Resend Free currently has a daily sending limit, so each verification code and each delivered letter counts toward the allowance.
-- Cloudflare Workers Free allows 10 ms of CPU time per Cron invocation. The Worker handles at most three due letters per minute to keep early beta work small.
-- In Cloudflare, watch **Workers & Pages > flara-day-backend > Metrics > Errors > Invocation Statuses** for `exceededCpu` or error `1102`.
-- In D1, watch row reads, row writes, and storage under the `flara-day-email` database metrics.
-- If CPU errors appear consistently, the straightforward fix is moving the Worker to Cloudflare Workers Paid; D1 and the app protocol do not need to be redesigned.
+## Monitoring
+
+- Watch Resend sent, delivered, bounced, and failed events.
+- Watch Resend's current daily and monthly plan allowances.
+- Watch Cloudflare Worker error and CPU-limit metrics.
+- Watch D1 reads, writes, and storage.
+- Check Cron invocations when a scheduled letter is late.
+- Treat repeated `exceededCpu` / error `1102` as a signal to optimize the batch or
+  move the Worker to a paid CPU allocation.
+
+## Secret Rotation
+
+When rotating a secret, update it with `wrangler secret put`, redeploy the
+Worker, run the health check, and complete one verification and delivery test.
+Rotating the pending-letter encryption key requires a migration plan for letters
+already encrypted with the old key.
+
+## Beta Access
+
+Email delivery is free to selected beta testers. It is intended to become a Plus
+feature for the public version, but no entitlement enforcement exists yet.

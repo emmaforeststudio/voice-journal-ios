@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -32,12 +34,16 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Flara Day uses the microphone to record your journal entries.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Flara Day uses on-device speech recognition to transcribe your private journal entries.</string>
+	<string>Flara Day uses on-device speech recognition as a fallback when cloud transcription is unavailable.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>VoiceJournalBackendURL</key>

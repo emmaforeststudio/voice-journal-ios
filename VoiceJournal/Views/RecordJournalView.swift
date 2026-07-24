@@ -4,7 +4,7 @@ import SwiftUI
 struct RecordJournalView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("profileDisplayName") private var profileDisplayName = ""
-    @AppStorage("showLivePreview") private var showLivePreview = true
+    @AppStorage("showLivePreview") private var showLivePreview = false
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
     @StateObject private var viewModel = RecorderViewModel()
     @State private var renderedFontPreference = JournalFontPreference.current.rawValue
@@ -62,9 +62,18 @@ struct RecordJournalView: View {
                 .padding(.top, 58)
 
             if viewModel.isProcessing {
-                ProgressView("Transcribing and shaping your journal")
-                    .font(selectedFontDesignPreference.font(.body))
-                    .padding(.top, 36)
+                if let limitReason = viewModel.processingLimitReason {
+                    RecordingLimitProcessingBanner(
+                        reason: limitReason,
+                        contentName: "journal",
+                        fontDesign: selectedFontDesignPreference
+                    )
+                    .padding(.top, 30)
+                } else {
+                    ProgressView("Transcribing and shaping your journal")
+                        .font(selectedFontDesignPreference.font(.body))
+                        .padding(.top, 36)
+                }
             }
 
             if let error = viewModel.errorMessage {
@@ -223,6 +232,54 @@ struct RecordJournalView: View {
 
     private func refreshRenderedFontPreference() {
         renderedFontPreference = JournalFontPreference.current.rawValue
+    }
+}
+
+struct RecordingLimitProcessingBanner: View {
+    let reason: RecordingDurationLimitReason
+    let contentName: String
+    let fontDesign: JournalFontDesignPreference
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "clock")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(reason.title)
+                        .font(fontDesign.font(.headline, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(reason.processingMessage)
+                        .font(fontDesign.font(.callout))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Divider()
+                .overlay(Color.accentColor.opacity(0.22))
+
+            ProgressView("Transcribing your \(contentName)...")
+                .font(fontDesign.font(.callout))
+                .foregroundStyle(.secondary)
+                .tint(Color.accentColor)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(reason.title). \(reason.processingMessage) Transcribing your \(contentName)."
+        )
     }
 }
 

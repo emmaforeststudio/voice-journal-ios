@@ -1,77 +1,116 @@
 # Flara Day App Store Metadata Draft
 
-## App Name
+Last reviewed: July 20, 2026
 
-Flara Day
+## App Information
 
-## Subtitle Options
+- Name: `Flara Day`
+- Subtitle: `Voice journal for reflection`
+- Primary language: English (U.S.)
+- Primary category: Lifestyle
+- Secondary category: Productivity (optional)
+- Bundle ID: `com.emmaforeststudio.FlaraDay`
+- SKU suggestion: `FLARADAY-IOS-001`
 
-Recommended:
-
-AI voice journal for daily reflection
-
-Alternatives:
-
-- A gentle AI voice journal
-- Capture your day by voice
-- Reflect with voice and insight
+The selected subtitle is 28 characters, within Apple's 30-character limit.
 
 ## Promotional Text
 
-Record your thoughts, turn them into polished journal entries, and revisit meaningful moments through gentle daily insights.
+Speak, write, and revisit your days through multilingual transcription, gentle
+insights, memories, and letters to your future self.
 
-## Short Description
+## Description
 
-Flara Day is a calm voice journal for recording daily reflections, creating cleaned journal drafts, and seeing simple insights across your entries.
+Flara Day is a calm place to speak or type what you want to remember.
 
-## Full Description
-
-Flara Day helps you turn spoken thoughts into a private daily journal.
-
-Record a reflection, review the cleaned draft, and save it to your calendar. Live preview can show transcription while you speak, and monthly insights help you notice patterns across your entries.
+Record a reflection in the languages you naturally use, review the cleaned
+journal draft, and save it to your calendar. Revisit meaningful entries through
+On This Day or a random memory, notice recurring themes in Month Recap, and write
+a letter for your future self.
 
 Features:
 
-- Voice recording for journal entries
-- AI transcription and journal draft cleanup
-- Optional live preview while recording
-- Calendar view for daily entries
-- Month recap and simple journal insights
-- Memory card with On This Day or Random Entry
-- Import and export tools
+- Voice recording with cloud transcription
+- Multilingual transcription designed to preserve the language you spoke
+- Optional live preview while recording, off by default
+- AI-assisted cleanup and title generation
+- Typed journals with no recording required
+- Calendar, search, editing, import, and export
+- Current streak, monthly entry count, and Month Recap themes
+- On This Day and Random Entry memories
+- Future letters delivered by an in-app notification or verified email
 - Face ID and password lock options
-- Theme, font, and font size customization
+- Theme, font, font-size, light-mode, and dark-mode customization
 
-Flara Day is designed for quiet reflection: a soft place to capture what happened, how it felt, and what you want to remember.
+Journal entries are stored on your iPhone unless you export them. Cloud services
+are used only for features that require transcription, AI text processing, or
+scheduled email delivery.
 
-## Keywords Draft
+Flara Day is designed for quiet reflection: a gentle place to capture what
+happened, how it felt, and what you want to carry forward.
 
-journal,voice journal,diary,reflection,transcription,mood,memories,daily journal,personal diary,AI journal
+## Keywords
 
-## Category
+`diary,reflection,transcription,mood,memories,wellness,thoughts,calendar,self care,mindfulness`
 
-Primary: Lifestyle
+This string is within Apple's 100-byte limit and avoids repeating the app name,
+company name, and the subtitle's strongest terms.
 
-Alternative: Productivity
+## URLs
 
-## Age Rating Notes
+- Support URL: `https://flara-day-backend.emmaforeststudio.workers.dev/support`
+- Privacy Policy URL: `https://flara-day-backend.emmaforeststudio.workers.dev/privacy`
+- Marketing URL: leave blank for beta; optional for public release
 
-Likely 4+, assuming the app does not include user-generated public content, unrestricted web access, or mature content. Journal content is user-created and private.
+## Age Rating Working Notes
 
-## Support URL
+Complete Apple's current age-rating questionnaire truthfully. Flara Day has no
+public user-generated content, chat, ads, gambling, unrestricted web access, or
+built-in mature material. A low rating is expected, but Apple calculates the
+final rating from the questionnaire and may show different regional equivalents.
 
-https://flara-day-backend.emmaforeststudio.workers.dev/support
+The privacy statement that Flara Day is not directed to children under 13 is an
+audience policy; it is not the same thing as Apple's content-based age rating.
 
-## Privacy Policy URL
+## App Review Notes
 
-https://flara-day-backend.emmaforeststudio.workers.dev/privacy
+Flara Day does not require an account or demo credentials.
 
-## Review Notes Draft
+Voice flow: open Create, tap Record, speak, stop recording, and review the cloud-
+generated draft. Final transcription uses the production backend and requires an
+internet connection. Optional Live Preview can be enabled in Settings and is off
+by default.
 
-Flara Day is a private voice journal app. Users record audio, which is sent through the app backend for transcription and journal draft cleanup. The backend keeps API keys off the device and forwards requests to OpenAI. Journal entries are stored locally on the user's device unless exported by the user.
+Future Letter flow: open Insights, tap Letter to Future Me, create a letter, pick
+In-App or Email, and schedule it. Email delivery asks the reviewer to verify an
+email address with a code sent to that address. In-app delivery uses a local iOS
+notification. For review, choose a delivery time several minutes in the future.
 
-Cloud transcription requires internet access. Face ID and password lock options are available in Settings.
+Journal entries and in-app future letters are stored locally. Cloudflare Workers
+forwards transcription and text-processing requests to OpenAI. Scheduled email
+letters are encrypted in Cloudflare D1 until Resend delivers them.
 
-## Demo Account
+No subscription or paywall is active in this selected-friends beta build. No
+analytics, advertising, tracking, or third-party crash SDK is included.
 
-Not required unless account login is added later.
+Contact: `emmaforeststudio@gmail.com`
+
+## TestFlight Beta Information
+
+### Beta Description
+
+Flara Day is a multilingual voice and typed journal with calendar history,
+monthly insights, memory resurfacing, and future letters.
+
+### What To Test
+
+Please test voice recording in one or several languages, including continuing
+to speak after locking the screen or switching apps. Confirm the timer and final
+transcription include that interval. Review and edit the generated journal,
+save and find entries, explore Insights, and schedule both an in-app and email
+future letter. Report transcription omissions, incorrect language conversion,
+notification or email delays, layout issues, and crashes.
+
+### Feedback Email
+
+`emmaforeststudio@gmail.com`

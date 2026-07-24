@@ -239,8 +239,15 @@ private struct AudioSelfTestView: View {
                     try await recorder.start()
                     status = "Recording microphone self-test..."
                     try await Task.sleep(for: .seconds(5))
+                    guard let previewAudio = try recorder.audioChunkData(from: 0, to: 5) else {
+                        throw RecordingError.audioChunkUnavailable
+                    }
                     let liveTranscript = try await OpenAIJournalService().previewTranscript(
-                        from: recorder.currentRecordingURL!
+                        fromAudioData: previewAudio,
+                        sessionID: UUID(),
+                        sequence: 0,
+                        chunkStartTime: 0,
+                        chunkEndTime: 5
                     )
                     try await Task.sleep(for: .seconds(3))
                     let heardAudio = recorder.hasDetectedAudio

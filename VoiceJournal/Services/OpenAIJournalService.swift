@@ -1,13 +1,27 @@
 import Foundation
 
+@MainActor
 struct OpenAIJournalService {
     private let session: URLSession
+    private let finalChunkDuration: TimeInterval = 6 * 60
+    private let finalChunkOverlap: TimeInterval = 2
 
     init(session: URLSession = .shared) {
         self.session = session
     }
 
     func makeDraft(from audioURL: URL, livePreviewTranscript: String = "") async throws -> JournalDraft {
+        let duration = try AudioRecorder.duration(of: audioURL)
+        try VoiceUsageTracker.recordTranscription(duration: duration)
+
+        if duration > finalChunkDuration {
+            let transcript = try await transcribeRecordingInChunks(from: audioURL, duration: duration)
+            return try await makeDraft(
+                fromTranscript: transcript,
+                livePreviewTranscript: livePreviewTranscript
+            )
+        }
+
         let audioData = try Data(contentsOf: audioURL)
         let request = try uploadRequest(
             endpoint: "journal",
@@ -26,6 +40,37 @@ struct OpenAIJournalService {
             throw OpenAIJournalServiceError.backend(error?.error ?? "The journal backend returned an error.")
         }
 
+        return try decodedDraft(from: data)
+    }
+
+    private func makeDraft(
+        fromTranscript transcript: String,
+        livePreviewTranscript: String
+    ) async throws -> JournalDraft {
+        var request = URLRequest(url: try backendURL().appendingPathComponent("journal-text"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            JournalTextRequest(
+                transcript: transcript,
+                livePreviewTranscript: livePreviewTranscript
+            )
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIJournalServiceError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let error = try? JSONDecoder().decode(BackendError.self, from: data)
+            throw OpenAIJournalServiceError.backend(error?.error ?? "The journal backend returned an error.")
+        }
+
+        return try decodedDraft(from: data)
+    }
+
+    private func decodedDraft(from data: Data) throws -> JournalDraft {
         let journal = try JSONDecoder().decode(JournalResponse.self, from: data)
         let language = JournalLanguage(rawValue: journal.language) ?? .english
         let emoji = JournalProcessor().normalizedMoodEmoji(journal.emoji, body: journal.body, language: language)
@@ -39,9 +84,135 @@ struct OpenAIJournalService {
         )
     }
 
-    func previewTranscript(from audioURL: URL) async throws -> String {
-        let audioData = try Data(contentsOf: audioURL)
-        return try await previewTranscript(fromAudioData: audioData)
+    func transcribeRecording(from audioURL: URL) async throws -> String {
+        let duration = try AudioRecorder.duration(of: audioURL)
+        try VoiceUsageTracker.recordTranscription(duration: duration)
+        return try await transcribeRecordingInChunks(from: audioURL, duration: duration)
+    }
+
+    func translate(title: String, body: String, to language: TranslationLanguage) async throws -> TranslatedContent {
+        var request = URLRequest(url: try backendURL().appendingPathComponent("translate"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            TranslationRequest(title: title, body: body, targetLanguage: language.displayName)
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIJournalServiceError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let error = try? JSONDecoder().decode(BackendError.self, from: data)
+            throw OpenAIJournalServiceError.backend(error?.error ?? "Translation was unavailable.")
+        }
+        return try JSONDecoder().decode(TranslatedContent.self, from: data)
+    }
+
+    private func transcribeRecordingInChunks(
+        from audioURL: URL,
+        duration: TimeInterval
+    ) async throws -> String {
+        if duration <= finalChunkDuration {
+            let audioData = try Data(contentsOf: audioURL)
+            return try await transcribeAudioData(audioData)
+        }
+
+        var transcript = ""
+        var chunkStart: TimeInterval = 0
+        while chunkStart < duration {
+            let chunkEnd = min(duration, chunkStart + finalChunkDuration)
+            guard let chunkData = try AudioRecorder.audioChunkData(
+                from: audioURL,
+                startTime: chunkStart,
+                endTime: chunkEnd
+            ) else {
+                break
+            }
+
+            let precedingContext = String(transcript.suffix(1_200))
+            let chunkTranscript = try await transcribeAudioData(
+                chunkData,
+                precedingTranscript: precedingContext
+            )
+            transcript = mergedTranscript(existing: transcript, incoming: chunkTranscript)
+            guard chunkEnd < duration else { break }
+            chunkStart = max(0, chunkEnd - finalChunkOverlap)
+        }
+
+        guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw OpenAIJournalServiceError.backend("No speech was detected in the recording.")
+        }
+        return transcript
+    }
+
+    private func transcribeAudioData(
+        _ audioData: Data,
+        precedingTranscript: String = ""
+    ) async throws -> String {
+        let request = try uploadRequest(
+            endpoint: "transcription",
+            audioData: audioData,
+            timeout: 120,
+            fields: ["previousTranscript": precedingTranscript]
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OpenAIJournalServiceError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let error = try? JSONDecoder().decode(BackendError.self, from: data)
+            throw OpenAIJournalServiceError.backend(error?.error ?? "Transcription was unavailable.")
+        }
+
+        return try JSONDecoder().decode(PreviewResponse.self, from: data).transcript
+    }
+
+    private func mergedTranscript(existing: String, incoming: String) -> String {
+        let previous = existing.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.isEmpty else { return previous }
+        guard !previous.isEmpty else { return next }
+        if previous.contains(next) { return previous }
+
+        let previousWords = previous.split(whereSeparator: \.isWhitespace)
+        let nextWords = next.split(whereSeparator: \.isWhitespace)
+        let maximumWordOverlap = min(24, previousWords.count, nextWords.count)
+        if maximumWordOverlap > 0 {
+            for count in stride(from: maximumWordOverlap, through: 1, by: -1) {
+                let previousSuffix = previousWords.suffix(count).map(normalizedTranscriptPart)
+                let nextPrefix = nextWords.prefix(count).map(normalizedTranscriptPart)
+                if previousSuffix.elementsEqual(nextPrefix) {
+                    return joinedTranscript(previous, nextWords.dropFirst(count).joined(separator: " "))
+                }
+            }
+        }
+
+        let previousTail = Array(previous.suffix(160))
+        let nextHead = Array(next.prefix(160))
+        let maximumCharacterOverlap = min(previousTail.count, nextHead.count)
+        if maximumCharacterOverlap >= 4 {
+            for count in stride(from: maximumCharacterOverlap, through: 4, by: -1) {
+                if normalizedTranscriptPart(String(previousTail.suffix(count))) ==
+                    normalizedTranscriptPart(String(nextHead.prefix(count))) {
+                    return joinedTranscript(previous, String(next.dropFirst(count)))
+                }
+            }
+        }
+
+        return joinedTranscript(previous, next)
+    }
+
+    private func normalizedTranscriptPart<S: StringProtocol>(_ value: S) -> String {
+        value.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func joinedTranscript(_ first: String, _ second: String) -> String {
+        let next = second.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.isEmpty else { return first }
+        return "\(first) \(next)"
     }
 
     func previewTranscript(
@@ -150,6 +321,22 @@ private struct JournalResponse: Decodable {
     let body: String
     let emoji: String
     let language: String
+}
+
+private struct JournalTextRequest: Encodable {
+    let transcript: String
+    let livePreviewTranscript: String
+}
+
+private struct TranslationRequest: Encodable {
+    let title: String
+    let body: String
+    let targetLanguage: String
+}
+
+struct TranslatedContent: Codable, Equatable {
+    let title: String
+    let body: String
 }
 
 private struct PreviewResponse: Decodable {

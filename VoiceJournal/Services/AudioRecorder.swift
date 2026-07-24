@@ -1,9 +1,15 @@
 import AVFoundation
 import Combine
 import Foundation
+import UIKit
+import UserNotifications
 
 @MainActor
 final class AudioRecorder: NSObject, ObservableObject {
+    private static let recordingSampleRate = 16_000
+    private static let recordingChannelCount = 1
+    private static let recordingBitDepth = 16
+
     @Published private(set) var isRecording = false
     @Published private(set) var inputLevel: Float = 0
     @Published private(set) var hasDetectedAudio = false
@@ -11,6 +17,29 @@ final class AudioRecorder: NSObject, ObservableObject {
     private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
     private var meterTask: Task<Void, Never>?
+    private var didReachDurationLimit = false
+    private var didReportInterruption = false
+    private var activeDurationLimit = VoiceUsageTracker.maximumRecordingDuration
+    private var activeDurationLimitReason = RecordingDurationLimitReason.perRecording
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
+
+    var onRecordingDurationLimitReached: ((RecordingDurationLimitReason) -> Void)?
+    var onRecordingInterrupted: ((RecordingInterruptionReason) -> Void)?
+
+    override init() {
+        super.init()
+        observeAudioSession()
+    }
+
+    deinit {
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+        }
+        if let routeChangeObserver {
+            NotificationCenter.default.removeObserver(routeChangeObserver)
+        }
+    }
 
     var currentRecordingURL: URL? {
         recordingURL
@@ -29,15 +58,25 @@ final class AudioRecorder: NSObject, ObservableObject {
 
     func start() async throws {
         try await prepare()
+        let remainingDuration = VoiceUsageTracker.remainingDuration()
+        guard remainingDuration > 0.5 else { throw RecordingError.dailyLimitReached }
+
+        activeDurationLimit = min(VoiceUsageTracker.maximumRecordingDuration, remainingDuration)
+        activeDurationLimitReason = remainingDuration < VoiceUsageTracker.maximumRecordingDuration
+            ? .daily
+            : .perRecording
+        didReachDurationLimit = false
+        didReportInterruption = false
+
         let session = AVAudioSession.sharedInstance()
         try await activateRecordingSession(session)
 
         let url = Self.temporaryRecordingURL()
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 44_100,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
+            AVSampleRateKey: Self.recordingSampleRate,
+            AVNumberOfChannelsKey: Self.recordingChannelCount,
+            AVLinearPCMBitDepthKey: Self.recordingBitDepth,
             AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
         ]
@@ -78,7 +117,9 @@ final class AudioRecorder: NSObject, ObservableObject {
         hasDetectedAudio = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
-        let recordedData = try? Data(contentsOf: recordingURL)
+        let recordedData = detectedAudioDuringRecording
+            ? nil
+            : try? Data(contentsOf: recordingURL, options: .mappedIfSafe)
         guard Self.shouldTranscribe(
             recordedDuration: recordedDuration,
             detectedAudioDuringRecording: detectedAudioDuringRecording,
@@ -96,22 +137,41 @@ final class AudioRecorder: NSObject, ObservableObject {
 
     func audioChunkData(from startTime: TimeInterval, to endTime: TimeInterval) throws -> Data? {
         guard let recordingURL else { throw RecordingError.notRecording }
-        let fileData = try Data(contentsOf: recordingURL)
-        guard let dataOffset = Self.wavDataOffset(in: fileData), fileData.count > dataOffset else {
+        return try Self.audioChunkData(from: recordingURL, startTime: startTime, endTime: endTime)
+    }
+
+    static func audioChunkData(
+        from recordingURL: URL,
+        startTime: TimeInterval,
+        endTime: TimeInterval
+    ) throws -> Data? {
+        let file = try FileHandle(forReadingFrom: recordingURL)
+        defer { try? file.close() }
+        let header = try file.read(upToCount: 4_096) ?? Data()
+        guard let dataOffset = Self.wavDataOffset(in: header) else {
             throw RecordingError.audioChunkUnavailable
         }
 
-        let byteRate = 44_100 * 1 * 16 / 8
-        let blockAlign = 1 * 16 / 8
+        let byteRate = recordingSampleRate * recordingChannelCount * recordingBitDepth / 8
+        let blockAlign = recordingChannelCount * recordingBitDepth / 8
         let startByte = dataOffset + Self.alignedByteOffset(for: max(0, startTime), byteRate: byteRate, blockAlign: blockAlign)
+        let fileSize = Int(try file.seekToEnd())
         let endByte = min(
-            fileData.count,
+            fileSize,
             dataOffset + Self.alignedByteOffset(for: max(startTime, endTime), byteRate: byteRate, blockAlign: blockAlign)
         )
 
         guard endByte > startByte + byteRate / 2 else { return nil }
-        let pcmData = fileData.subdata(in: startByte..<endByte)
+        try file.seek(toOffset: UInt64(startByte))
+        let pcmData = try file.read(upToCount: endByte - startByte) ?? Data()
+        guard !pcmData.isEmpty else { return nil }
         return Self.wavData(fromPCMData: pcmData)
+    }
+
+    static func duration(of recordingURL: URL) throws -> TimeInterval {
+        let audioFile = try AVAudioFile(forReading: recordingURL)
+        guard audioFile.fileFormat.sampleRate > 0 else { return 0 }
+        return TimeInterval(audioFile.length) / audioFile.fileFormat.sampleRate
     }
 
     private func activateRecordingSession(_ session: AVAudioSession) async throws {
@@ -127,6 +187,58 @@ final class AudioRecorder: NSObject, ObservableObject {
     private func configureAndActivate(_ session: AVAudioSession) throws {
         try session.setCategory(.record, mode: .measurement)
         try session.setActive(true)
+    }
+
+    private func observeAudioSession() {
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleAudioSessionInterruption(notification)
+            }
+        }
+
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleAudioRouteChange(notification)
+            }
+        }
+    }
+
+    private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard isRecording, !didReportInterruption else { return }
+        guard
+            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+            AVAudioSession.InterruptionType(rawValue: rawType) == .began
+        else { return }
+
+        reportInterruption(.system)
+    }
+
+    private func handleAudioRouteChange(_ notification: Notification) {
+        guard isRecording, !didReportInterruption else { return }
+        guard
+            let rawReason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+            AVAudioSession.RouteChangeReason(rawValue: rawReason) == .oldDeviceUnavailable
+        else { return }
+
+        reportInterruption(.audioInputChanged)
+    }
+
+    private func reportInterruption(_ reason: RecordingInterruptionReason) {
+        didReportInterruption = true
+        if UIApplication.shared.applicationState != .active {
+            Task {
+                await RecordingStatusNotificationScheduler.scheduleInterruption(reason)
+            }
+        }
+        onRecordingInterrupted?(reason)
     }
 
     private func requestMicrophonePermission() async -> Bool {
@@ -222,11 +334,11 @@ final class AudioRecorder: NSObject, ObservableObject {
         data.appendASCII("fmt ")
         data.appendUInt32LittleEndian(16)
         data.appendUInt16LittleEndian(1)
-        data.appendUInt16LittleEndian(1)
-        data.appendUInt32LittleEndian(44_100)
-        data.appendUInt32LittleEndian(44_100 * 1 * 16 / 8)
-        data.appendUInt16LittleEndian(1 * 16 / 8)
-        data.appendUInt16LittleEndian(16)
+        data.appendUInt16LittleEndian(UInt16(recordingChannelCount))
+        data.appendUInt32LittleEndian(UInt32(recordingSampleRate))
+        data.appendUInt32LittleEndian(UInt32(recordingSampleRate * recordingChannelCount * recordingBitDepth / 8))
+        data.appendUInt16LittleEndian(UInt16(recordingChannelCount * recordingBitDepth / 8))
+        data.appendUInt16LittleEndian(UInt16(recordingBitDepth))
         data.appendASCII("data")
         data.appendUInt32LittleEndian(UInt32(pcmData.count))
         data.append(pcmData)
@@ -245,6 +357,17 @@ final class AudioRecorder: NSObject, ObservableObject {
                 if level > 0.002 {
                     self.hasDetectedAudio = true
                 }
+                if !self.didReachDurationLimit, audioRecorder.currentTime >= self.activeDurationLimit {
+                    self.didReachDurationLimit = true
+                    if UIApplication.shared.applicationState != .active {
+                        let reason = self.activeDurationLimitReason
+                        Task {
+                            await RecordingStatusNotificationScheduler.scheduleLimit(reason)
+                        }
+                    }
+                    self.onRecordingDurationLimitReached?(self.activeDurationLimitReason)
+                    return
+                }
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
@@ -258,6 +381,7 @@ enum RecordingError: LocalizedError {
     case notRecording
     case noAudibleAudio
     case audioChunkUnavailable
+    case dailyLimitReached
 
     var errorDescription: String? {
         switch self {
@@ -273,6 +397,139 @@ enum RecordingError: LocalizedError {
             "The microphone captured silence. Check that Flara Day has microphone access, disconnect any unused Bluetooth microphone, and try again."
         case .audioChunkUnavailable:
             "Live preview could not prepare the latest audio chunk."
+        case .dailyLimitReached:
+            "You have reached the 60-minute voice limit for today. You can type journals and letters, and recording will be available again tomorrow."
+        }
+    }
+}
+
+enum RecordingDurationLimitReason {
+    case perRecording
+    case daily
+
+    var title: String {
+        switch self {
+        case .perRecording:
+            "30-minute limit reached"
+        case .daily:
+            "Daily voice limit reached"
+        }
+    }
+
+    var processingMessage: String {
+        "Your recording stopped automatically. Everything captured is intact and is now being transcribed."
+    }
+
+    var notice: String {
+        switch self {
+        case .perRecording:
+            "Recording stopped at the 30-minute limit."
+        case .daily:
+            "Recording stopped because you reached today's 60-minute voice limit."
+        }
+    }
+}
+
+enum RecordingInterruptionReason {
+    case system
+    case audioInputChanged
+
+    var notice: String {
+        switch self {
+        case .system:
+            "Recording stopped because another system audio activity interrupted the microphone. Everything captured before the interruption is being processed."
+        case .audioInputChanged:
+            "Recording stopped because the microphone or audio route changed. Everything captured before the change is being processed."
+        }
+    }
+}
+
+@MainActor
+final class RecordingProcessingBackgroundTask {
+    private var identifier = UIBackgroundTaskIdentifier.invalid
+    private let name: String
+
+    init(name: String) {
+        self.name = name
+        begin()
+    }
+
+    func finish() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
+    }
+
+    private func begin() {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            Task { @MainActor in
+                self?.finish()
+            }
+        }
+    }
+}
+
+enum RecordingStatusNotificationScheduler {
+    static func scheduleLimit(_ reason: RecordingDurationLimitReason) async {
+        await schedule(title: reason.title, body: reason.processingMessage)
+    }
+
+    static func scheduleInterruption(_ reason: RecordingInterruptionReason) async {
+        await schedule(title: "Recording stopped", body: reason.notice)
+    }
+
+    private static func schedule(title: String, body: String) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "recording-status-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        try? await center.add(request)
+    }
+}
+
+enum VoiceUsageTracker {
+    static let maximumRecordingDuration: TimeInterval = 30 * 60
+    static let betaDailyDurationLimit: TimeInterval = 60 * 60
+
+    private static let dateKey = "betaVoiceUsageDate"
+    private static let durationKey = "betaVoiceUsageDuration"
+
+    static func remainingDuration(now: Date = Date(), defaults: UserDefaults = .standard) -> TimeInterval {
+        resetIfNeeded(now: now, defaults: defaults)
+        return max(0, betaDailyDurationLimit - defaults.double(forKey: durationKey))
+    }
+
+    static func recordTranscription(
+        duration: TimeInterval,
+        now: Date = Date(),
+        defaults: UserDefaults = .standard
+    ) throws {
+        resetIfNeeded(now: now, defaults: defaults)
+        let used = defaults.double(forKey: durationKey)
+        guard used + duration <= betaDailyDurationLimit + 0.5 else {
+            throw RecordingError.dailyLimitReached
+        }
+        defaults.set(used + max(0, duration), forKey: durationKey)
+    }
+
+    private static func resetIfNeeded(now: Date, defaults: UserDefaults) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now).timeIntervalSince1970
+        if defaults.double(forKey: dateKey) != today {
+            defaults.set(today, forKey: dateKey)
+            defaults.set(0, forKey: durationKey)
         }
     }
 }

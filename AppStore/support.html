@@ -5,61 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Flara Day Support</title>
   <style>
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #edf8f6;
-      color: #1d2220;
-      line-height: 1.6;
-    }
-    main {
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 48px 22px 64px;
-    }
-    .card {
-      background: #ffffffcc;
-      border: 1px solid rgba(103, 201, 194, 0.24);
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 18px 40px rgba(79, 129, 124, 0.12);
-    }
-    p, li {
-      color: #5f6c68;
-    }
-    a {
-      color: #257f78;
-      font-weight: 600;
-    }
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #24302d; background: #edf8f4; }
+    body { margin: 0; padding: 40px 20px; }
+    main { max-width: 760px; margin: 0 auto; background: rgba(255,255,255,.76); border: 1px solid rgba(84,133,121,.18); border-radius: 8px; padding: 32px; box-shadow: 0 20px 60px rgba(70,102,96,.12); }
+    h1 { margin: 0 0 8px; font-size: 34px; }
+    h2 { margin: 28px 0 8px; font-size: 20px; }
+    p, li { font-size: 16px; line-height: 1.65; }
+    a { color: #397f74; font-weight: 650; }
   </style>
 </head>
 <body>
   <main>
-    <div class="card">
-      <h1>Flara Day Support</h1>
-      <p>Need help with Flara Day? Contact <a href="mailto:emmaforeststudio@gmail.com">emmaforeststudio@gmail.com</a>.</p>
+    <h1>Flara Day Support</h1>
+    <p>For help, bug reports, or feedback, email <a href="mailto:emmaforeststudio@gmail.com">emmaforeststudio@gmail.com</a>.</p>
 
-      <h2>Common Questions</h2>
-      <h3>My recording is not transcribing.</h3>
-      <p>Check your internet connection and try again. Cloud transcription requires network access. If live preview is unavailable, your audio may still be recording and final transcription may still work.</p>
+    <h2>Recording And Transcription</h2>
+    <p>Cloud transcription needs an internet connection. Confirm microphone access in iPhone Settings and check Settings &gt; Connection in Flara Day. Live Preview is optional and off by default; final transcription can still work when preview is off.</p>
+    <p>During the selected-friends beta, one recording can be up to 30 minutes and the app allows up to 60 transcribed voice minutes per calendar day. Typed journals and letters remain available after the daily voice allowance is reached.</p>
+    <p>An active recording can continue while the iPhone is locked or Flara Day is in the background for the remainder of the same 30-minute recording limit. For example, locking the iPhone after 8 minutes leaves up to 22 minutes. Screen lock alone does not shorten the limit. A phone call, Siri, alarm, disconnected microphone, force-quit, or iOS termination may stop the recording earlier; Flara Day keeps and processes everything captured before a handled interruption.</p>
 
-      <h3>Where are my journals stored?</h3>
-      <p>Journal entries are stored on your device unless you export them. Cloud processing is used for transcription and draft generation.</p>
+    <h2>Future Letters</h2>
+    <p>Allow Flara Day notifications for in-app delivery. For Email, verify the recipient address with the code sent to it, and check spam/junk if a code or letter is missing. Tapping an in-app notification should open the delivered letter.</p>
 
-      <h3>How do I delete my journals?</h3>
-      <p>Open Settings, then use the privacy section to delete journals or delete account data.</p>
+    <h2>Journal Storage</h2>
+    <p>Saved journals and in-app future letters are stored on this iPhone. Cloud services are used only for transcription, AI journal processing, and scheduled email delivery.</p>
 
-      <h3>How do I export my journals?</h3>
-      <p>Open Settings, then choose Export Journals.</p>
+    <h2>Import, Export, And Deletion</h2>
+    <p>Export Journals creates a shareable file. Import supports compatible text, UTF-8 text, JSON, RTF, HTML, and PDFs containing selectable text. Scanned image PDFs need OCR first. Word is not imported directly; Apple Notes can be imported after export or sharing as PDF or text. Delete individual entries from their detail screen or use Settings &gt; Privacy to delete journals or all app data.</p>
 
-      <h3>How do I request a feature?</h3>
-      <p>Open Settings, then Support, then Request / Vote on Features.</p>
+    <h2>Feature Requests</h2>
+    <p>Open Settings &gt; Support &gt; Request / Vote on Features. The current feature board is local to this iPhone.</p>
 
-      <h2>App Information</h2>
-      <p>App name: Flara Day<br>Current version: 1.0</p>
-
-      <p><a href="/privacy">Privacy Policy</a></p>
-    </div>
+    <h2>Helpful Details For A Bug Report</h2>
+    <ul>
+      <li>iPhone model and iOS version</li>
+      <li>what you were trying to do and what happened instead</li>
+      <li>whether the issue occurred on Wi-Fi, cellular, or both</li>
+      <li>languages used and approximate recording length, when relevant</li>
+    </ul>
+    <p>Please do not send private journal text unless you knowingly choose to share it.</p>
+    <p><a href="/privacy">Privacy Policy</a></p>
   </main>
 </body>
 </html>

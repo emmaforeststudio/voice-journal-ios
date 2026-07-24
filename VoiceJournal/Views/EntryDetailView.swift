@@ -7,6 +7,8 @@ struct EntryDetailView: View {
     @AppStorage("themeColorPreference") private var themeColorPreference = AppColorTheme.h1.rawValue
     @AppStorage("journalFontPreference") private var journalFontPreference = JournalFontPreference.standard.rawValue
     @AppStorage("journalFontDesignPreference") private var journalFontDesignPreference = JournalFontDesignPreference.system.rawValue
+    @AppStorage("transcriptOutputMode") private var transcriptOutputMode = TranscriptOutputMode.asSpoken.rawValue
+    @AppStorage("translationTargetLanguage") private var translationTargetLanguage = TranslationLanguage.english.rawValue
     @FocusState private var focusedField: Field?
     let entry: JournalEntry
     @State private var isEditing = false
@@ -19,15 +21,33 @@ struct EntryDetailView: View {
     @State private var draftJournalDate: Date
     @State private var draftEmoji: String
     @State private var draftLanguage: JournalLanguage
+    @State private var originalTitle: String
+    @State private var originalBody: String
+    @State private var translatedTitle: String
+    @State private var translatedBody: String
+    @State private var selectedContentVersion: TranslatedContentVersion
+    @State private var isTranslating = false
+    @State private var translationError: String?
+    @State private var suppressVersionSync = false
     private let processor = JournalProcessor()
 
     init(entry: JournalEntry) {
         self.entry = entry
+        let savedVersion = TranslatedContentVersion(rawValue: entry.displayedVersionRawValue ?? "") ?? .original
+        let savedOriginalTitle = entry.originalTitle ?? (savedVersion == .original ? entry.title : "")
+        let savedOriginalBody = entry.originalBody ?? (savedVersion == .original ? entry.body : "")
+        let savedTranslatedTitle = entry.translatedTitle ?? (savedVersion == .translated ? entry.title : "")
+        let savedTranslatedBody = entry.translatedBody ?? (savedVersion == .translated ? entry.body : "")
         _draftTitle = State(initialValue: entry.title)
         _draftBody = State(initialValue: entry.body)
         _draftJournalDate = State(initialValue: entry.journalDate)
         _draftEmoji = State(initialValue: entry.emoji)
         _draftLanguage = State(initialValue: entry.language)
+        _originalTitle = State(initialValue: savedOriginalTitle)
+        _originalBody = State(initialValue: savedOriginalBody)
+        _translatedTitle = State(initialValue: savedTranslatedTitle)
+        _translatedBody = State(initialValue: savedTranslatedBody)
+        _selectedContentVersion = State(initialValue: savedVersion)
     }
 
     private enum Field {
@@ -43,6 +63,9 @@ struct EntryDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     titleView
                     metadataRow
+                    if shouldShowVersionSwitcher {
+                        versionSwitcher
+                    }
                     Divider()
                     bodyView
                 }
@@ -56,6 +79,24 @@ struct EntryDetailView: View {
         .background(AppThemeBackground())
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .tabBar)
+        .onChange(of: draftTitle) { _, newValue in
+            guard !suppressVersionSync else { return }
+            if selectedContentVersion == .original {
+                originalTitle = newValue
+                invalidateTranslation()
+            } else {
+                translatedTitle = newValue
+            }
+        }
+        .onChange(of: draftBody) { _, newValue in
+            guard !suppressVersionSync else { return }
+            if selectedContentVersion == .original {
+                originalBody = newValue
+                invalidateTranslation()
+            } else {
+                translatedBody = newValue
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             bottomActionBar
         }
@@ -187,17 +228,18 @@ struct EntryDetailView: View {
     @ViewBuilder
     private var titleView: some View {
         if isEditing {
-            TextField("Title", text: $draftTitle, axis: .vertical)
+            TextField("Title", text: $draftTitle)
                 .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .textInputAutocapitalization(.sentences)
-                .lineLimit(1...4)
+                .lineLimit(1)
                 .focused($focusedField, equals: .title)
         } else {
             Text(draftTitle.isEmpty ? "Untitled Journal" : draftTitle)
                 .font(selectedFontDesignPreference.font(.title2, weight: .semibold))
                 .foregroundStyle(draftTitle.isEmpty ? .secondary : .primary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -218,6 +260,27 @@ struct EntryDetailView: View {
 
             EmojiSelector(selection: $draftEmoji, itemSize: 32, font: selectedFontDesignPreference.font(.body))
                 .frame(maxWidth: 210, alignment: .trailing)
+        }
+    }
+
+    private var versionSwitcher: some View {
+        VStack(spacing: 8) {
+            TranslatedContentSwitcher(
+                selection: selectedContentVersion,
+                translatedLabel: translationLanguage.compactDisplayName,
+                isTranslating: isTranslating,
+                translatedVersionAvailable: !translatedBody.isEmpty
+            ) { version in
+                selectContentVersion(version)
+            }
+
+            if let translationError {
+                Text(translationError)
+                    .font(selectedFontDesignPreference.font(.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -304,6 +367,18 @@ struct EntryDetailView: View {
         AppColorTheme.value(for: themeColorPreference)
     }
 
+    private var selectedTranscriptOutputMode: TranscriptOutputMode {
+        TranscriptOutputMode.value(for: transcriptOutputMode)
+    }
+
+    private var translationLanguage: TranslationLanguage {
+        TranslationLanguage.value(for: entry.translationLanguageRawValue ?? translationTargetLanguage)
+    }
+
+    private var shouldShowVersionSwitcher: Bool {
+        !translatedBody.isEmpty || isTranslating
+    }
+
     private func modeSelectionBackground(_ isSelected: Bool) -> Color {
         guard isSelected else { return .clear }
         return selectedTheme.colorScheme == .dark ? selectedTheme.primaryColor : Color.white.opacity(0.90)
@@ -321,11 +396,18 @@ struct EntryDetailView: View {
     }
 
     private func saveChanges() {
+        storeActiveVersion()
         entry.title = draftTitle
         entry.body = draftBody
         entry.journalDate = draftJournalDate
         entry.emoji = draftEmoji
         entry.language = draftLanguage
+        entry.originalTitle = originalTitle
+        entry.originalBody = originalBody
+        entry.translatedTitle = translatedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : translatedTitle
+        entry.translatedBody = translatedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : translatedBody
+        entry.translationLanguageRawValue = translatedBody.isEmpty ? nil : translationLanguage.rawValue
+        entry.displayedVersionRawValue = selectedContentVersion.rawValue
         entry.updatedAt = .now
         try? modelContext.save()
     }
@@ -337,16 +419,91 @@ struct EntryDetailView: View {
     }
 
     private func appendDraft(_ draft: JournalDraft) {
+        storeActiveVersion()
         let appendedText = draft.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !appendedText.isEmpty else { return }
 
-        let existingBody = draftBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        draftBody = existingBody.isEmpty ? appendedText : "\(existingBody)\n\n\(appendedText)"
-        if draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draftTitle == "Untitled Journal" {
-            draftTitle = processor.makeTitle(from: draftBody, language: draft.language)
+        let existingBody = originalBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        originalBody = existingBody.isEmpty ? appendedText : "\(existingBody)\n\n\(appendedText)"
+        if originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || originalTitle == "Untitled Journal" {
+            originalTitle = processor.makeTitle(from: originalBody, language: draft.language)
         }
         draftLanguage = draft.language
-        draftEmoji = processor.moodEmoji(from: draftBody, language: draft.language)
+        draftEmoji = processor.moodEmoji(from: originalBody, language: draft.language)
+        translatedTitle = ""
+        translatedBody = ""
+        setDisplayedContent(title: originalTitle, body: originalBody, version: .original)
         isRecordingMode = false
+        if selectedTranscriptOutputMode == .translate {
+            Task {
+                await prepareTranslation(selectTranslatedWhenReady: true)
+            }
+        }
+    }
+
+    private func selectContentVersion(_ version: TranslatedContentVersion) {
+        guard version != selectedContentVersion else { return }
+        storeActiveVersion()
+        if version == .translated, translatedBody.isEmpty {
+            Task {
+                await prepareTranslation(selectTranslatedWhenReady: true)
+            }
+            return
+        }
+        let content = version == .original
+            ? (originalTitle, originalBody)
+            : (translatedTitle, translatedBody)
+        setDisplayedContent(title: content.0, body: content.1, version: version)
+    }
+
+    private func storeActiveVersion() {
+        if selectedContentVersion == .original {
+            originalTitle = draftTitle
+            originalBody = draftBody
+        } else {
+            translatedTitle = draftTitle
+            translatedBody = draftBody
+        }
+    }
+
+    private func setDisplayedContent(title: String, body: String, version: TranslatedContentVersion) {
+        suppressVersionSync = true
+        selectedContentVersion = version
+        draftTitle = title
+        draftBody = body
+        Task { @MainActor in
+            await Task.yield()
+            suppressVersionSync = false
+        }
+    }
+
+    private func invalidateTranslation() {
+        translatedTitle = ""
+        translatedBody = ""
+        translationError = nil
+    }
+
+    @MainActor
+    private func prepareTranslation(selectTranslatedWhenReady: Bool) async {
+        guard translatedBody.isEmpty, !isTranslating else { return }
+        storeActiveVersion()
+        guard !originalBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        isTranslating = true
+        translationError = nil
+        do {
+            let translation = try await OpenAIJournalService().translate(
+                title: originalTitle,
+                body: originalBody,
+                to: TranslationLanguage.value(for: translationTargetLanguage)
+            )
+            translatedTitle = translation.title
+            translatedBody = translation.body
+            if selectTranslatedWhenReady {
+                setDisplayedContent(title: translatedTitle, body: translatedBody, version: .translated)
+            }
+        } catch {
+            translationError = "Translation is unavailable right now. Your original is safe."
+        }
+        isTranslating = false
     }
 }
